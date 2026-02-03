@@ -10,12 +10,8 @@
     <parent>
         <groupId>org.wildfly.security.hashicorp.vault</groupId>
         <artifactId>hashicorp-vault-parent</artifactId>
-        <!--
-        Maintain separation between the artifact id and the version to help prevent
-        merge conflicts between commits changing the GA and those changing the V.
-        -->
-        <version>1.0.0.Alpha1-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
+        <version>1.0.0.Alpha3-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>wildfly-hashicorp-vault-tests</artifactId>
@@ -33,7 +29,7 @@
         <as.debug.port>8787</as.debug.port>
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
-        <server.jboss.args>--stability=preview</server.jboss.args>
+        <server.jboss.args>--stability=experimental</server.jboss.args>
         <!-- Feature pack to use to provision hashicorp-vault -->
         <hashicorp-vault.feature.pack.groupId>${project.groupId}</hashicorp-vault.feature.pack.groupId>
         <hashicorp-vault.feature.pack.artifactId>wildfly-hashicorp-vault-feature-pack</hashicorp-vault.feature.pack.artifactId>
@@ -49,7 +45,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Import the arquillian bom before the mvc-tck one, as it declares an old version of the arq bom -->
             <dependency>
                 <groupId>org.jboss.arquillian</groupId>
                 <artifactId>arquillian-bom</artifactId>
@@ -63,6 +58,13 @@
                 <version>${version.org.wildfly.arquillian}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>2.0.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -72,7 +74,16 @@
             <artifactId>wildfly-arquillian-container-managed</artifactId>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>${version.junit.junit}</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -90,53 +101,42 @@
                     <galleon-options>
                         <jboss-fork-embedded>${galleon.fork.embedded}</jboss-fork-embedded>
                         <optional-packages>passive+</optional-packages>
-                        <config-stability-level>preview</config-stability-level>
+                        <config-stability-level>experimental</config-stability-level>
                         <package-stability-level>experimental</package-stability-level>
                     </galleon-options>
                 </configuration>
                 <executions>
                     <!-- Provision with layers -->
-                    <execution>
+                    <!-- <execution>
                         <id>wildfly-layers-provisioning</id>
                         <goals>
                             <goal>provision</goal>
                         </goals>
-                        <phase>compile</phase>
+                        <phase>install</phase>
                         <configuration>
                             <provisioning-dir>${project.build.directory}/wildfly-layers</provisioning-dir>
                             <layers>
                                 <layer>core-server</layer>
-                                <layer>hashicorp-vault-layer</layer>
+                                <layer>hashicorp-vault</layer>
                             </layers>
                         </configuration>
-                    </execution>
-                    <!-- Provision a full installation -->
+                    </execution> -->
+                    <!-- provision full server -->
                     <execution>
-                        <id>wildfly-complete-provisioning</id>
+                        <id>wildfly-full-provisioning</id>
                         <goals>
                             <goal>provision</goal>
                         </goals>
                         <phase>compile</phase>
                         <configuration>
-                            <provisioning-dir>${project.build.directory}/wildfly-complete</provisioning-dir>
-                        </configuration>
-                    </execution>
-                    <!-- Add the subsystem to the wildfly-complete dist's standalone.xml -->
-                    <execution>
-                        <id>configure-hashicorp-subsystem-subsystem</id>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>execute-commands</goal>
-                        </goals>
-                        <configuration>
-                            <jboss-home>${project.build.directory}/wildfly-complete</jboss-home>
-                            <offline>true</offline>
-                            <commands>
-                                <command>embed-server --stability=preview</command>
-                                <command>/extension=org.wildfly.extension.hashicorp-vault:add</command>
-                                <command>/subsystem=hashicorp-vault:add</command>
-                                <command>stop-embedded-server</command>
-                            </commands>
+                            <provisioning-dir>${project.build.directory}/wildfly-full</provisioning-dir>
+                           <layers>
+                                <layer>base-server</layer>
+                                <layer>elytron</layer>
+                                <layer>management</layer>
+                                <layer>core-tools</layer>
+                                <layer>hashicorp-vault</layer>
+                            </layers>
                         </configuration>
                     </execution>
                 </executions>

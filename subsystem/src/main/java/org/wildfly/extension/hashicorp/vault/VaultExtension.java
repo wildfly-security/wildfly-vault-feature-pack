@@ -6,30 +6,21 @@ package org.wildfly.extension.hashicorp.vault;
 
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 
-import javax.xml.namespace.QName;
+import java.util.regex.Pattern;
 
+import org.jboss.as.controller.Extension;
 import org.jboss.as.controller.ExtensionContext;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.ResourceRegistration;
 import org.jboss.as.controller.SubsystemModel;
 import org.jboss.as.controller.SubsystemRegistration;
-import org.jboss.as.controller.SubsystemSchema;
-import org.jboss.as.controller.persistence.xml.ResourceXMLParticleFactory;
-import org.jboss.as.controller.persistence.xml.SubsystemResourceRegistrationXMLElement;
-import org.jboss.as.controller.persistence.xml.SubsystemResourceXMLSchema;
-import org.jboss.as.controller.xml.VersionedNamespace;
 import org.jboss.as.version.Stability;
-import org.jboss.staxmapper.IntVersion;
-import org.wildfly.subsystem.SubsystemConfiguration;
-import org.wildfly.subsystem.SubsystemExtension;
-import org.wildfly.subsystem.SubsystemPersistence;
 
 /**
  * WildFly extension that provides HashiCorp Vault Support
  *
  */
-public final class VaultExtension implements org.jboss.as.controller.Extension {
+public final class VaultExtension implements Extension {
 
     /**
      * The name of our subsystem within the model.
@@ -70,11 +61,19 @@ public final class VaultExtension implements org.jboss.as.controller.Extension {
         return FEATURE_STABILITY;
     }
 
+    /**
+     * Pattern for VAULT expressions: ${HC_VAULT::hashicorp-vault-credential-store-name:alias}
+     */
+    private static final Pattern VAULT_EXPRESSION_PATTERN = Pattern.compile("\\$\\{HC_VAULT::.+}");
+
     @Override
     public void initialize(ExtensionContext context) {
         final SubsystemRegistration subsystem = context.registerSubsystem(SUBSYSTEM_NAME, CURRENT_MODEL_VERSION);
         subsystem.registerSubsystemModel(new VaultSubsystemDefinition());
         subsystem.registerXMLElementWriter(VaultSubsystemParser_1_0.INSTANCE);
+
+        VaultExpressionResolver vaultResolver = new VaultExpressionResolver();
+        context.registerExpressionResolverExtension(() -> vaultResolver, VAULT_EXPRESSION_PATTERN, false);
     }
     
     @Override

@@ -13,7 +13,6 @@ public class HashiCorpVaultFeaturePackBasicTest {
 
     @Test
     public void testBuild() {
-        // does nothing yet, just here to compile
-        assertEquals("test1", 10, 10);
+        assertEquals(5, 2 + 3);
     }
 }

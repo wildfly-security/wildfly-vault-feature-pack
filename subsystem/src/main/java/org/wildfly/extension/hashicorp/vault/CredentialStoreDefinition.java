@@ -121,10 +121,11 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             .build();
 
     static final ObjectTypeAttributeDefinition CREDENTIAL_REFERENCE = 
-            CredentialReference.getAttributeBuilder("credential-reference", "credential-reference", false)
+            CredentialReference.getAttributeBuilder("credential-reference", "credential-reference", true)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
                     .setCapabilityReference(CREDENTIAL_STORE_CAPABILITY, CREDENTIAL_STORE_RUNTIME_CAPABILITY)
                     .setStability(Stability.EXPERIMENTAL)
+                    .setRequired(false)
                     .build();
 
     public static final Collection<AttributeDefinition> ATTRIBUTES = List.of(HOST_NAME_DEF, NAMESPACE_DEF,

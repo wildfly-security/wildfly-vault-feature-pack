@@ -62,7 +62,7 @@
         <version.org.wildfly>40.0.0.Beta1-SNAPSHOT</version.org.wildfly>
         <version.org.wildfly.common>2.0.1</version.org.wildfly.common>
         <!-- The wildfly core version must contain the elytron module with with CredentialStoreExtension -->
-        <version.org.wildfly.core>32.0.0.Beta4-SNAPSHOT</version.org.wildfly.core>
+        <version.org.wildfly.core>32.0.0.Beta4</version.org.wildfly.core>
 
         <!-- Test dependency versions -->
         <version.junit.junit>4.13.2</version.junit.junit>
@@ -180,7 +180,7 @@
                         <dependency>
                             <groupId>org.wildfly.core</groupId>
                             <artifactId>wildfly-embedded</artifactId>
-                            <version>${version.org.wildfly.core}</version>
+                            <version>32.0.0.Beta1</version>
                         </dependency>
                         <!-- If you add a dependency on wildfly-embedded you need to bring your own
                         transitives -->

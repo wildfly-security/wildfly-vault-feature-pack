@@ -29,7 +29,6 @@ import org.jboss.as.controller.security.CredentialReference;
 import org.jboss.as.version.Stability;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
-import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceRegistry;
@@ -71,13 +70,13 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
     static final String KEYSTORE_PATH="keystore-path";
     static final String KEYSTORE_PASSWORD ="truststore-password";
 
-    protected static final SimpleAttributeDefinition HOST_NAME_DEF =
+    protected static final SimpleAttributeDefinition HOST_ADDRESS_DEF =
             new SimpleAttributeDefinitionBuilder(HOST_ADDRESS, ModelType.STRING)
                     .setRequired(true)
                     .setAllowExpression(true)
                     .setXmlName(HOST_ADDRESS)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .build();
 
     protected static final SimpleAttributeDefinition NAMESPACE_DEF =
@@ -86,7 +85,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .setAllowExpression(true)
                     .setXmlName(NAMESPACE)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .build();
 
     protected static final SimpleAttributeDefinition TRUSTSTORE_PATH_DEF =
@@ -95,7 +94,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .setAllowExpression(true)
                     .setXmlName(TRUSTSTORE_PATH)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .build();
 
     protected static final SimpleAttributeDefinition KEYSTORE_PATH_DEF =
@@ -104,7 +103,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .setAllowExpression(true)
                     .setXmlName(KEYSTORE_PATH)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .build();
 
     protected static final SimpleAttributeDefinition TRUSTSTORE_PASSWORD_DEF =
@@ -113,7 +112,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .setAllowExpression(true)
                     .setXmlName(KEYSTORE_PASSWORD)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .build();
 
     static final RuntimeCapability<Void> CREDENTIAL_STORE_RUNTIME_CAPABILITY =  RuntimeCapability
@@ -124,11 +123,11 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             CredentialReference.getAttributeBuilder("credential-reference", "credential-reference", true)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
                     .setCapabilityReference(CREDENTIAL_STORE_CAPABILITY, CREDENTIAL_STORE_RUNTIME_CAPABILITY)
-                    .setStability(Stability.EXPERIMENTAL)
+                    .setStability(Stability.COMMUNITY)
                     .setRequired(false)
                     .build();
 
-    public static final Collection<AttributeDefinition> ATTRIBUTES = List.of(HOST_NAME_DEF, NAMESPACE_DEF,
+    public static final Collection<AttributeDefinition> ATTRIBUTES = List.of(HOST_ADDRESS_DEF, NAMESPACE_DEF,
                 TRUSTSTORE_PATH_DEF, KEYSTORE_PATH_DEF, TRUSTSTORE_PASSWORD_DEF, CREDENTIAL_REFERENCE);
 
     static final StandardResourceDescriptionResolver OPERATION_RESOLVER = 
@@ -138,50 +137,50 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
 
     static final SimpleAttributeDefinition ALIAS = new SimpleAttributeDefinitionBuilder("alias", ModelType.STRING, false)
             .setMinSize(1)
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     static final SimpleAttributeDefinition SECRET_VALUE = new SimpleAttributeDefinitionBuilder("secret-value", ModelType.STRING, false)
             .setMinSize(0)
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     static final SimpleAttributeDefinition PATH = new SimpleAttributeDefinitionBuilder("path", ModelType.STRING, true)
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     static final SimpleAttributeDefinition RECURSIVE = new SimpleAttributeDefinitionBuilder("recursive", ModelType.BOOLEAN, true)
             .setDefaultValue(ModelNode.FALSE)
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     static final SimpleAttributeDefinition RECURSIVE_DEPTH = new SimpleAttributeDefinitionBuilder("recursive-depth", ModelType.INT, true)
             .setDefaultValue(new ModelNode(100))
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     static final SimpleAttributeDefinition MAX_NUMBER_OF_ALIASES = new SimpleAttributeDefinitionBuilder("max-number-of-aliases", ModelType.INT, true)
             .setDefaultValue(new ModelNode(10000))
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     private static final SimpleOperationDefinition READ_ALIASES = new SimpleOperationDefinitionBuilder("read-aliases", OPERATION_RESOLVER)
             .setParameters(PATH, RECURSIVE, RECURSIVE_DEPTH, MAX_NUMBER_OF_ALIASES)
             .setRuntimeOnly()
             .setReadOnly()
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     private static final SimpleOperationDefinition ADD_ALIAS = new SimpleOperationDefinitionBuilder("add-alias", OPERATION_RESOLVER)
             .setParameters(ALIAS, SECRET_VALUE)
             .setRuntimeOnly()
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     private static final SimpleOperationDefinition REMOVE_ALIAS = new SimpleOperationDefinitionBuilder("remove-alias", OPERATION_RESOLVER)
             .setParameters(ALIAS)
             .setRuntimeOnly()
-            .setStability(Stability.EXPERIMENTAL)
+            .setStability(Stability.COMMUNITY)
             .build();
 
     public CredentialStoreDefinition() {
@@ -195,7 +194,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
 
     @Override
     public Stability getStability() {
-        return Stability.EXPERIMENTAL;
+        return Stability.COMMUNITY;
     }
 
     @Override
@@ -236,7 +235,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
         protected void performRuntime(OperationContext context, ModelNode operation, ModelNode model) throws OperationFailedException {
             final String name = context.getCurrentAddressValue();
 
-                final ModelNode hostnameNode = HOST_NAME_DEF.resolveModelAttribute(context, model);
+                final ModelNode hostnameNode = HOST_ADDRESS_DEF.resolveModelAttribute(context, model);
                 final ModelNode namespaceNode = NAMESPACE_DEF.resolveModelAttribute(context, model);
                 final ModelNode truststorePathNode = TRUSTSTORE_PATH_DEF.resolveModelAttribute(context, model);
                 final ModelNode keystorePathNode = KEYSTORE_PATH_DEF.resolveModelAttribute(context, model);

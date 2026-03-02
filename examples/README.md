@@ -20,7 +20,7 @@ vault kv put secret/database username=dbuser password=secretpass
 Add the Vault subsystem to your `standalone.xml`:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:experimental:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
     <credential-store name="my-vault"
                       host-address="http://localhost:8200">
         <credential-reference clear-text="myroot"/>
@@ -31,7 +31,7 @@ Add the Vault subsystem to your `standalone.xml`:
 For production environments with TLS, configure certificate stores:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:experimental:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
     <credential-store name="secure-vault"
                       host-address="https://vault.example.com:8200"
                       truststore-path="/opt/security/truststore.jks"

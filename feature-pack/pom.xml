@@ -169,9 +169,9 @@
                         <configuration>
                             <fork-embedded>${galleon.fork.embedded}</fork-embedded>
                             <generate-channel-manifest>true</generate-channel-manifest>
-                            <minimum-stability-level>experimental</minimum-stability-level>
-                            <config-stability-level>experimental</config-stability-level>
-                            <package-stability-level>experimental</package-stability-level>
+                            <minimum-stability-level>community</minimum-stability-level>
+                            <config-stability-level>community</config-stability-level>
+                            <package-stability-level>community</package-stability-level>
                         </configuration>
                     </execution>
                 </executions>

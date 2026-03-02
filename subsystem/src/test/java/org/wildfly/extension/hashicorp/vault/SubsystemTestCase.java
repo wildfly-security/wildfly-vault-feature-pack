@@ -22,7 +22,7 @@ public class SubsystemTestCase extends AbstractSubsystemBaseTest {
 
     @Override
     protected String getSubsystemXml() throws IOException {
-        return readResource("hashicorp-vault-experimental-1.0.xml");
+        return readResource("hashicorp-vault-community-1.0.xml");
     }
 
 }

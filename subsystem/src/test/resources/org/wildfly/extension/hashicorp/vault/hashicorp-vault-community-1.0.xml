@@ -3,4 +3,4 @@
   ~ SPDX-License-Identifier: Apache-2.0
   -->
 
-<subsystem xmlns="urn:wildfly:hashicorp-vault:experimental:1.0"/>
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0"/>

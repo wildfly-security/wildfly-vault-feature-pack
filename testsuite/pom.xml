@@ -14,8 +14,8 @@
         Maintain separation between the artifact id and the version to help prevent
         merge conflicts between commits changing the GA and those changing the V.
         -->
-        <version>1.0.0.Alpha1-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
+        <version>1.0.0.Alpha3-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>wildfly-vault-tests</artifactId>
@@ -28,17 +28,18 @@
 
         <version.org.jboss.arquillian>1.9.5.Final</version.org.jboss.arquillian>
         <version.org.wildfly.arquillian>5.0.1.Final</version.org.wildfly.arquillian>
+        <version.org.testcontainers>2.0.2</version.org.testcontainers>
+        <version.org.junit>6.0.0</version.org.junit>
         <surefire.memory.args>-Xmx512m -XX:MetaspaceSize=128m</surefire.memory.args>
         <surefire.jpda.args>-agentlib:jdwp=transport=dt_socket,address=*:${as.debug.port},server=y,suspend=y</surefire.jpda.args>
         <as.debug.port>8787</as.debug.port>
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
-        <server.jboss.args>--stability=preview</server.jboss.args>
+        <server.jboss.args>--stability=experimental</server.jboss.args>
         <!-- Feature pack to use to provision vault -->
         <vault.feature.pack.groupId>${project.groupId}</vault.feature.pack.groupId>
         <vault.feature.pack.artifactId>wildfly-vault-feature-pack</vault.feature.pack.artifactId>
         <vault.feature.pack.version>${project.version}</vault.feature.pack.version>
-
         <base.feature.pack.groupId>org.wildfly.security</base.feature.pack.groupId>
         <base.feature.pack.artifactId>wildfly-ee-galleon-pack</base.feature.pack.artifactId>
         <base.feature.pack.version>${version.org.wildfly}</base.feature.pack.version>
@@ -49,7 +50,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Import the arquillian bom before the mvc-tck one, as it declares an old version of the arq bom -->
             <dependency>
                 <groupId>org.jboss.arquillian</groupId>
                 <artifactId>arquillian-bom</artifactId>
@@ -63,6 +63,13 @@
                 <version>${version.org.wildfly.arquillian}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+	            <version>${version.org.testcontainers}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -70,14 +77,33 @@
         <dependency>
             <groupId>org.wildfly.arquillian</groupId>
             <artifactId>wildfly-arquillian-container-managed</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-vault</artifactId>
+            <version>${version.org.testcontainers}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit</groupId>
+            <artifactId>junit-bom</artifactId>
+            <version>${version.org.junit}</version>
+            <type>pom</type>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+	    <version>${version.org.junit}</version>
+	    <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-
             <!-- Provision traditional unzipped server installations -->
             <plugin>
                 <groupId>org.wildfly.plugins</groupId>
@@ -90,60 +116,95 @@
                     <galleon-options>
                         <jboss-fork-embedded>${galleon.fork.embedded}</jboss-fork-embedded>
                         <optional-packages>passive+</optional-packages>
-                        <config-stability-level>preview</config-stability-level>
+                        <config-stability-level>experimental</config-stability-level>
                         <package-stability-level>experimental</package-stability-level>
                     </galleon-options>
                 </configuration>
                 <executions>
                     <!-- Provision with layers -->
-                    <execution>
+                   <execution>
                         <id>wildfly-layers-provisioning</id>
                         <goals>
                             <goal>provision</goal>
                         </goals>
-                        <phase>compile</phase>
+                        <phase>integration</phase>
                         <configuration>
                             <provisioning-dir>${project.build.directory}/wildfly-layers</provisioning-dir>
                             <layers>
-                                <layer>core-server</layer>
-                                <layer>hashicorp-vault-layer</layer>
+                                <layer>base-server</layer>
+                                <layer>elytron</layer>
+                                <layer>management</layer>
+                                <layer>core-tools</layer>
+                                <layer>hashicorp-vault</layer>
                             </layers>
                         </configuration>
                     </execution>
-                    <!-- Provision a full installation -->
+                    <!-- provision full server -->
                     <execution>
-                        <id>wildfly-complete-provisioning</id>
+                        <id>wildfly-full-provisioning</id>
                         <goals>
                             <goal>provision</goal>
                         </goals>
-                        <phase>compile</phase>
+                        <phase>integration</phase>
                         <configuration>
-                            <provisioning-dir>${project.build.directory}/wildfly-complete</provisioning-dir>
+                            <provisioning-dir>${project.build.directory}/wildfly-full</provisioning-dir>
+                           <layers>
+                                <layer>base-server</layer>
+                                <layer>elytron</layer>
+                                <layer>management</layer>
+                                <layer>core-tools</layer>
+                                <layer>hashicorp-vault</layer>
+                            </layers>
                         </configuration>
                     </execution>
-                    <!-- Add the subsystem to the wildfly-complete dist's standalone.xml -->
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemProperties>
+                        <arquillian.launch>wildfly</arquillian.launch>
+                        <server.jvm.args>${server.jvm.args}</server.jvm.args>
+                        <server.jboss.args>${server.jboss.args}</server.jboss.args>
+                    </systemProperties>
+                    <argLine>${surefire.system.args}</argLine>
+                </configuration>
+                <executions>
                     <execution>
-                        <id>configure-vault-subsystem</id>
-                        <phase>compile</phase>
+                        <id>default-test</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>layers-tests</id>
+                        <phase>test</phase>
                         <goals>
-                            <goal>execute-commands</goal>
+                            <goal>test</goal>
                         </goals>
                         <configuration>
-                            <jboss-home>${project.build.directory}/wildfly-complete</jboss-home>
-                            <offline>true</offline>
-                            <commands>
-                                <command>embed-server --stability=preview</command>
-                                <command>/extension=org.wildfly.extension.hashicorp-vault:add</command>
-                                <command>/subsystem=hashicorp-vault:add</command>
-                                <command>stop-embedded-server</command>
-                            </commands>
+                            <systemProperties>
+                                <jboss.home>${project.build.directory}/wildfly-layers</jboss.home>
+                            </systemProperties>
+                            <reportNameSuffix>wildfly-layers</reportNameSuffix>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>complete-dist-tests</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <systemProperties>
+                                <jboss.home>${project.build.directory}/wildfly-full</jboss.home>
+                            </systemProperties>
+                            <reportNameSuffix>wildfly-full</reportNameSuffix>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
-
     <profiles>
 
         <!-- Default single feature pack provisioning -->

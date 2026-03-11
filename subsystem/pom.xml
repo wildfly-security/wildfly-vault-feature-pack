@@ -129,14 +129,19 @@
             <artifactId>vault-java-driver</artifactId>
             <version>${version.vault.java.driver}</version>
         </dependency>
-
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>${version.junit.junit}</version>
+            <groupId>org.junit</groupId>
+            <artifactId>junit-bom</artifactId>
+            <version>${version.org.junit}</version>
+            <type>pom</type>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${version.org.junit}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.wildfly.core</groupId>
             <artifactId>wildfly-embedded</artifactId>

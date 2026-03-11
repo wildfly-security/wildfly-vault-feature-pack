@@ -79,6 +79,21 @@ Reference Vault credentials using the format `<vault-path>.<key>`:
 
 For more detailed examples, see the [examples/README.md](examples/README.md).
 
+## Using Podman instead of Docker for testing:
+
+To use Podman instead of Docker on Linux:
+
+Start the Podman daemon in the background:
+```bash
+$ systemctl --user start podman.socket &
+```
+
+Set the DOCKER_HOST environmental variable:
+```bash
+$ export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
+```
+See https://podman-desktop.io/tutorial/testcontainers-with-podman for more details.
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

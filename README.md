@@ -38,10 +38,10 @@ galleon install org.wildfly.security.vault:wildfly-vault-feature-pack:1.0.0.Alph
   --dir=wildfly
 ```
 
-Start WildFly with experimental stability:
+Start WildFly with community stability:
 
 ```bash
-./wildfly/bin/standalone.sh --stability=experimental
+./wildfly/bin/standalone.sh --stability=community
 ```
 
 ### CLI Commands

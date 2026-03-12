@@ -17,7 +17,7 @@ public class VaultSubsystemParser_1_0 extends PersistentResourceXMLParser {
     
     public static final VaultSubsystemParser_1_0 INSTANCE = new VaultSubsystemParser_1_0();
 
-    public static final String NAMESPACE = "urn:wildfly:hashicorp-vault:experimental:1.0";
+    public static final String NAMESPACE = "urn:wildfly:hashicorp-vault:community:1.0";
 
 
     @Override

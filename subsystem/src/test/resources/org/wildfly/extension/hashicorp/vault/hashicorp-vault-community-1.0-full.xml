@@ -3,8 +3,8 @@
   ~ SPDX-License-Identifier: Apache-2.0
   -->
 
-<subsystem xmlns="urn:wildfly:hashicorp-vault:experimental:1.0">
-    <credential-store name="minimal-vault" 
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+    <credential-store name="minimal-vault"
                       host-address="https://vault.minimal.com:8200">
         <credential-reference clear-text="minimal-token-123"/>
     </credential-store>

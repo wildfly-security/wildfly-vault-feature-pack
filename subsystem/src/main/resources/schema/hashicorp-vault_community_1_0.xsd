@@ -4,11 +4,11 @@
   ~ SPDX-License-Identifier: Apache-2.0
   -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-            targetNamespace="urn:wildfly:hashicorp-vault:experimental:1.0"
-            xmlns="urn:wildfly:hashicorp-vault:experimental:1.0"
-            elementFormDefault="qualified"
-            attributeFormDefault="unqualified"
-            version="1.0">
+           targetNamespace="urn:wildfly:hashicorp-vault:community:1.0"
+           xmlns="urn:wildfly:hashicorp-vault:community:1.0"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
 
     <!-- The subsystem root element -->
     <xs:element name="subsystem" type="subsystemType"/>
@@ -63,14 +63,14 @@
                 </xs:documentation>
             </xs:annotation>
         </xs:attribute>
-            <xs:attribute name="truststore-password" type="xs:string" use="optional">
-                <xs:annotation>
-                    <xs:documentation>
-                        Password for the keystore.
-                    </xs:documentation>
-                </xs:annotation>
-            </xs:attribute>
-        </xs:complexType>
+        <xs:attribute name="truststore-password" type="xs:string" use="optional">
+            <xs:annotation>
+                <xs:documentation>
+                    Password for the keystore.
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
 
     <xs:complexType name="credential-reference-type">
         <xs:annotation>

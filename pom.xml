@@ -71,6 +71,7 @@
         <version.org.testcontainers>2.0.2</version.org.testcontainers>
         <version.shrinkwrap.resolvers>3.1.4</version.shrinkwrap.resolvers>
         <version.org.wildfly.test>${version.org.wildfly}</version.org.wildfly.test>
+        <version.org.testcontainers>2.0.2</version.org.testcontainers>
 
         <!-- Nexus Settings -->
         <nexus.repository.staging>wildfly-staging</nexus.repository.staging>
@@ -103,6 +104,20 @@
 
     <dependencyManagement>
         <dependencies>
+
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${version.org.testcontainers}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-vault</artifactId>
+                <scope>test</scope>
+            </dependency>
 
             <dependency>
                 <groupId>${project.groupId}</groupId>

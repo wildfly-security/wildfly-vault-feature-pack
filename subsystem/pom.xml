@@ -142,6 +142,13 @@
             <version>${version.org.junit}</version>
             <scope>test</scope>
         </dependency>
+        <!-- WildFly AbstractSubsystemBaseTest uses JUnit 4 @BeforeClass to init SubsystemTestDelegate; Vintage runs that lifecycle so xmlMapper is set -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>${version.org.junit}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.wildfly.core</groupId>
             <artifactId>wildfly-embedded</artifactId>
@@ -153,7 +160,6 @@
             <groupId>org.wildfly.security.hashicorp.vault</groupId>
             <artifactId>wildfly-elytron-hashicorp-vault</artifactId>
         </dependency>
-        <!-- Testcontainers for Vault integration tests -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>

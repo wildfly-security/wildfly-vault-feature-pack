@@ -28,4 +28,9 @@
                       host-address="https://vault.credref.com:8200">
         <credential-reference clear-text="cleartext-token"/>
     </credential-store>
+
+    <credential-store name="minimal-store"
+                      host-address="http://localhost:8200">
+        <credential-reference clear-text="test-token"/>
+    </credential-store>
 </subsystem>

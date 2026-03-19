@@ -5,7 +5,7 @@ on:
       - main
 jobs:
   build:
-    name: Build and test
+    name: Build and test (JDK ${{ matrix.java }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,37 +18,12 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: 'maven'
-      - name: Build and test
-        run: mvn -B clean verify
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: Test Results (JDK ${{ matrix.java }})
-          path: '**/target/surefire-reports/*.xml'
-          reporter: java-junit
-
-  build-with-latest-wildfly:
-    name: Build and test with latest WildFly
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout wildfly-vault-feature-pack
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
-
       - name: Checkout WildFly
         uses: actions/checkout@v4
         with:
           repository: wildfly/wildfly
           ref: main
           path: wildfly
-
       - name: Cache WildFly build
         uses: actions/cache@v4
         id: wildfly-cache
@@ -58,21 +33,16 @@ jobs:
             wildfly/dist/target
             ~/.m2/repository/org/wildfly
             ~/.m2/repository/org/jboss
-          key: wildfly-${{ hashFiles('wildfly/pom.xml') }}
-
+          key: wildfly-${{ hashFiles('wildfly/pom.xml') }}-jdk${{ matrix.java }}
       - name: Build WildFly
         if: steps.wildfly-cache.outputs.cache-hit != 'true'
         run: |
           cd wildfly
           mvn -B install -DskipTests
-
       - name: Get WildFly version
         id: wildfly-version
         run: |
           VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout -f wildfly/pom.xml)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Using WildFly version: $VERSION"
-
-      - name: Build and test wildfly-vault-feature-pack with latest WildFly
-        run: |
-          mvn -B install -Dversion.org.wildfly=${{ steps.wildfly-version.outputs.version }}
+      - name: Build and test
+        run: mvn -B install -Dversion.org.wildfly=${{ steps.wildfly-version.outputs.version }}

@@ -167,6 +167,8 @@
                         </goals>
                         <phase>prepare-package</phase>
                         <configuration>
+                            <configDir>${project.build.directory}</configDir>
+                            <configFile>wildfly-feature-pack-build.xml</configFile>
                             <fork-embedded>${galleon.fork.embedded}</fork-embedded>
                             <generate-channel-manifest>true</generate-channel-manifest>
                             <minimum-stability-level>community</minimum-stability-level>

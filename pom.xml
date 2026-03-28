@@ -175,6 +175,24 @@
     </modules>
 
     <build>
+        <!-- Parent POM is otherwise only installed in the install phase; forked build-feature-pack
+        resolves reactor artifacts from ~/.m2, so publish this POM at the start of the build. -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>install-parent-pom-for-reactor-downstream</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>install</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>

@@ -31,7 +31,7 @@
         <dependency>
             <groupId>org.wildfly.security.hashicorp.vault</groupId>
             <artifactId>wildfly-elytron-hashicorp-vault</artifactId>
-            <version>1.0.0.Alpha3</version>
+            <version>${version.wildfly.elytron.hashicorp.vault}</version>
         </dependency>
         <dependency>
             <groupId>io.github.jopenlibs</groupId>

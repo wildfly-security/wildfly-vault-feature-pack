@@ -172,6 +172,7 @@
         <module>galleon-shared</module>
         <module>subsystem</module>
         <module>feature-pack</module>
+        <module>preview-feature-pack</module>
         <module>testsuite</module>
     </modules>
 

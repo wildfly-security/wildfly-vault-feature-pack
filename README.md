@@ -11,7 +11,8 @@ This project provides a WildFly subsystem extension that enables integration wit
 - HashiCorp Vault connection management
 - Credential store integration with WildFly Elytron
 - Support for Vault KV secrets engine
-- CLI commands for managing Vault connections
+- CLI commands for managing credential stores and aliases
+- `${HC_VAULT::…}` expression resolution for secrets (where WildFly resolves expressions outside the MODEL stage)
 
 ## Requirements
 
@@ -44,7 +45,36 @@ Start WildFly with community stability:
 ./wildfly/bin/standalone.sh --stability=community
 ```
 
-### CLI Commands
+### Subsystem configuration (XML)
+
+Minimal HTTP Vault URL:
+
+```xml
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+    <credential-store name="my-vault"
+                      host-address="http://localhost:8200">
+        <credential-reference clear-text="myroot"/>
+    </credential-store>
+</subsystem>
+```
+
+For **HTTPS**, TLS trust and optional client authentication are configured in **Elytron**, not on the credential store. Use **`authentication-context`** with an Elytron client context name:
+
+```xml
+<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+    <credential-store name="secure-vault"
+                      host-address="https://vault.example.com:8200"
+                      authentication-context="vault-tls-context">
+        <credential-reference clear-text="vault-token"/>
+    </credential-store>
+</subsystem>
+```
+
+Optional **`namespace`** (Vault Enterprise) is supported as an attribute on `credential-store`. Define **`vault-tls-context`** (and related Elytron `ssl-context`, `trust-store`, etc.) before referencing it.
+
+### CLI commands
+
+Create Elytron TLS client resources **before** adding a credential store that uses `authentication-context`.
 
 ```bash
 /subsystem=hashicorp-vault/credential-store=my-vault:add(
@@ -54,7 +84,7 @@ Start WildFly with community stability:
 
 /subsystem=hashicorp-vault/credential-store=secure-vault:add(
     host-address="https://vault.example.com:8200",
-    authentication-context=ac,
+    authentication-context=vault-tls-context,
     credential-reference={clear-text="vault-token"}
 )
 
@@ -67,15 +97,36 @@ Start WildFly with community stability:
 /subsystem=hashicorp-vault/credential-store=my-vault:read-aliases()
 ```
 
-### Using Vault Credentials
+### Using Vault credentials (`credential-reference`)
 
-Reference Vault credentials using the format `<vault-path>.<key>`:
+Use the credential store **`name`** and an alias in the form **`<vault-path>.<key>`** (KV path and field name):
 
 ```xml
 <credential-reference store="my-vault" alias="secret/database.password"/>
 ```
 
-For more detailed examples, see the [examples/README.md](examples/README.md).
+### HC_VAULT expressions
+
+The extension registers an expression resolver. Values can reference Vault using:
+
+```text
+${HC_VAULT::credential-store-name:alias}
+```
+
+- **`credential-store-name`** — the `name` of the `credential-store` resource
+- **`alias`** — the same string as in `credential-reference` (for example `secret/database.password`)
+
+Resolution requires the credential store service to be available and is **not supported in the MODEL stage**; use only on attributes that resolve expressions at a later stage.
+
+Example:
+
+```xml
+<system-properties>
+    <property name="example.secret" value="${HC_VAULT::my-vault:secret/database.password}"/>
+</system-properties>
+```
+
+For step-by-step setup, TLS notes, and more examples, see [examples/README.md](examples/README.md).
 
 ## Using Podman instead of Docker for testing:
 

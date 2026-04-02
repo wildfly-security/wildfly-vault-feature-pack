@@ -39,14 +39,6 @@ galleon install org.wildfly.security.vault:wildfly-vault-feature-pack:1.0.0.Alph
   --dir=wildfly
 ```
 
-To provision on top of **WildFly Preview** (same Vault layer, base pack is `wildfly-preview-feature-pack`), install the preview artifact built from `preview-feature-pack/`:
-
-```bash
-galleon install org.wildfly.security.vault:wildfly-vault-preview-feature-pack:1.0.0.Alpha5-SNAPSHOT \
-  --layers=hashicorp-vault \
-  --dir=wildfly-preview
-```
-
 Start WildFly with community stability:
 
 ```bash

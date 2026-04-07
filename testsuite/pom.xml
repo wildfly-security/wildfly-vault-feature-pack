@@ -21,7 +21,7 @@
     <packaging>jar</packaging>
 
     <name>WildFly Vault Feature Pack -- Testsuite</name>
-    <description>WildFly Vault Feature Pack TestSuite</description>
+    <description>WildFly Vault Feature Pack integration tests; the test-jar classifier is published for reuse.</description>
 
     <properties>
 
@@ -167,6 +167,29 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-tests-sources</id>
+                        <goals>
+                            <goal>test-jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Provision traditional unzipped server installations -->
             <plugin>
                 <groupId>org.wildfly.plugins</groupId>
@@ -296,14 +319,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <!-- Skip deploying testsuite: test-only module has no main sources/javadoc, and test artifacts are not published to the repo for now -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <configuration>
-                    <skip>true</skip>
-                </configuration>
             </plugin>
         </plugins>
     </build>

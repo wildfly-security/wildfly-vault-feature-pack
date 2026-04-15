@@ -4,6 +4,7 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
+import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.FAILURE_DESCRIPTION;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OUTCOME;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.RESULT;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUCCESS;
@@ -195,5 +196,65 @@ public class CredentialStoreVaultIntegrationTestCase extends SubsystemJUnit5Test
         List<ModelNode> afterList = kernelServices.executeOperation(readAliases).get(RESULT).asList();
         assertFalse(afterList != null && afterList.stream().anyMatch(n -> alias1.equals(n.asString())), "Expected alias1 removed");
         assertFalse(afterList != null && afterList.stream().anyMatch(n -> alias2.equals(n.asString())), "Expected alias2 removed");
+    }
+
+    // =====================================================================
+    // Runtime operation error paths
+    // =====================================================================
+
+    /**
+     * Adding an alias that already exists in the credential store should fail.
+     * Test passes when the second add-alias returns outcome=failed with "already exists" message.
+     */
+    @Test
+    public void testAddAliasThatAlreadyExists() throws Exception {
+        String alias = "secret/duplicate.error_test";
+
+        ModelNode addAlias = Util.createOperation("add-alias", CREDENTIAL_STORE_ADDRESS);
+        addAlias.get("alias").set(alias);
+        addAlias.get("secret-value").set("value1");
+        ModelNode firstResult = kernelServices.executeOperation(addAlias);
+        assertEquals(SUCCESS, firstResult.get(OUTCOME).asString(), "First add should succeed: " + firstResult);
+
+        ModelNode addDuplicate = Util.createOperation("add-alias", CREDENTIAL_STORE_ADDRESS);
+        addDuplicate.get("alias").set(alias);
+        addDuplicate.get("secret-value").set("value2");
+        ModelNode dupResult = kernelServices.executeOperation(addDuplicate);
+        assertEquals("failed", dupResult.get(OUTCOME).asString(), "Duplicate add should fail: " + dupResult);
+        assertTrue(dupResult.get(FAILURE_DESCRIPTION).asString().contains("already exists"),
+                "Should mention 'already exists': " + dupResult.get(FAILURE_DESCRIPTION).asString());
+
+        // Cleanup
+        ModelNode removeAlias = Util.createOperation("remove-alias", CREDENTIAL_STORE_ADDRESS);
+        removeAlias.get("alias").set(alias);
+        kernelServices.executeOperation(removeAlias);
+    }
+
+    /**
+     * Removing an alias that does not exist in the credential store should fail.
+     * Test passes when the operation returns outcome=failed with "does not exist" message.
+     */
+    @Test
+    public void testRemoveAliasThatDoesNotExist() throws Exception {
+        ModelNode removeAlias = Util.createOperation("remove-alias", CREDENTIAL_STORE_ADDRESS);
+        removeAlias.get("alias").set("secret/nonexistent.no_such_key");
+        ModelNode result = kernelServices.executeOperation(removeAlias);
+        assertEquals("failed", result.get(OUTCOME).asString(), "Remove of non-existent alias should fail: " + result);
+        assertTrue(result.get(FAILURE_DESCRIPTION).asString().contains("does not exist"),
+                "Should mention 'does not exist': " + result.get(FAILURE_DESCRIPTION).asString());
+    }
+
+    /**
+     * Adding an alias without providing a secret-value should fail.
+     * Test passes when the operation returns outcome=failed.
+     */
+    @Test
+    public void testAddAliasWithoutSecretValue() throws Exception {
+        ModelNode addAlias = Util.createOperation("add-alias", CREDENTIAL_STORE_ADDRESS);
+        addAlias.get("alias").set("secret/missing.secret_value");
+        // Deliberately omit secret-value
+        ModelNode result = kernelServices.executeOperation(addAlias);
+        assertEquals("failed", result.get(OUTCOME).asString(),
+                "add-alias without secret-value should fail: " + result);
     }
 }

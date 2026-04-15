@@ -43,6 +43,7 @@
         <!-- For some reason this needs to be true if base.feature.pack.artifactId=wildfly-galleon-pack
              But make it externally controllable in case someone wants to test with this turned off -->
         <ignore.not.excluded.layers>true</ignore.not.excluded.layers>
+        <overwrite.provisioned.server>true</overwrite.provisioned.server>
     </properties>
 
     <dependencyManagement>
@@ -163,6 +164,13 @@
             <version>${version.org.jboss.shrinkwrap}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Servlet API for VaultSecretServlet deployed by HashiCorpVaultCrudIntegrationTestCase -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -175,7 +183,7 @@
                     <log-provisioning-time>${galleon.log.time}</log-provisioning-time>
                     <offline-provisioning>${galleon.offline}</offline-provisioning>
                     <record-provisioning-state>true</record-provisioning-state>
-                    <overwrite-provisioned-server>true</overwrite-provisioned-server>
+                    <overwrite-provisioned-server>${overwrite.provisioned.server}</overwrite-provisioned-server>
                     <galleon-options>
                         <jboss-fork-embedded>${galleon.fork.embedded}</jboss-fork-embedded>
                         <optional-packages>passive+</optional-packages>
@@ -198,6 +206,7 @@
                                 <layer>elytron</layer>
                                 <layer>management</layer>
                                 <layer>core-tools</layer>
+                                <layer>web-server</layer>
                                 <layer>hashicorp-vault</layer>
                             </layers>
                         </configuration>
@@ -216,6 +225,7 @@
                                 <layer>elytron</layer>
                                 <layer>management</layer>
                                 <layer>core-tools</layer>
+                                <layer>web-server</layer>
                                 <layer>hashicorp-vault</layer>
                             </layers>
                         </configuration>

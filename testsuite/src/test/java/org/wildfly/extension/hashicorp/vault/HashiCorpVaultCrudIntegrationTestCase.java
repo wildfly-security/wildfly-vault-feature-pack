@@ -15,7 +15,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.HOST_ADDRESS;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -27,20 +36,28 @@ import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.operations.common.Util;
+import org.jboss.as.server.CurrentServiceContainer;
 import org.jboss.dmr.ModelNode;
+import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
-import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.vault.VaultContainer;
+import org.wildfly.security.credential.PasswordCredential;
+import org.wildfly.security.credential.store.CredentialStore;
+import org.wildfly.security.password.interfaces.ClearPassword;
 
 /**
  * End-to-end Arquillian integration test that exercises the full credential store CRUD lifecycle against a real
  * WildFly server provisioned with the hashicorp-vault feature pack, backed by a Testcontainers Vault instance.
  * <p>
  * Covers the user workflow: provision WildFly with feature pack &rarr; add credential store &rarr;
- * add/read/remove aliases &rarr; resolve expressions &rarr; error handling for duplicates and missing aliases.
+ * add/read/remove aliases &rarr; verify secrets are accessible from a deployed application &rarr;
+ * error handling for duplicates and missing aliases.
  */
 @ExtendWith(ArquillianExtension.class)
 @RunAsClient
@@ -66,11 +83,39 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     private static final String ATTR_PATH = CredentialStoreDefinition.PATH.getName();
     private static final String ATTR_RECURSIVE = CredentialStoreDefinition.RECURSIVE.getName();
 
+    private static final String JBOSS_DEPLOYMENT_STRUCTURE = """
+            <jboss-deployment-structure>
+                <deployment>
+                    <dependencies>
+                        <module name="org.wildfly.security.elytron" services="import"/>
+                        <module name="org.jboss.as.server"/>
+                        <module name="org.jboss.msc"/>
+                    </dependencies>
+                </deployment>
+            </jboss-deployment-structure>
+            """;
+
+    private static final String WEB_XML = """
+            <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.0">
+                <servlet>
+                    <servlet-name>VaultSecretServlet</servlet-name>
+                    <servlet-class>org.wildfly.extension.hashicorp.vault.HashiCorpVaultCrudIntegrationTestCase$VaultSecretServlet</servlet-class>
+                </servlet>
+                <servlet-mapping>
+                    <servlet-name>VaultSecretServlet</servlet-name>
+                    <url-pattern>/vault-secret</url-pattern>
+                </servlet-mapping>
+            </web-app>
+            """;
+
     private static VaultContainer<?> vault;
 
     @Deployment
-    public static JavaArchive deployment() {
-        return ShrinkWrap.create(JavaArchive.class, "vault-crud-test.jar");
+    public static WebArchive deployment() {
+        return ShrinkWrap.create(WebArchive.class, "vault-crud-test.war")
+                .addClass(VaultSecretServlet.class)
+                .addAsWebInfResource(new StringAsset(JBOSS_DEPLOYMENT_STRUCTURE), "jboss-deployment-structure.xml")
+                .addAsWebInfResource(new StringAsset(WEB_XML), "web.xml");
     }
 
     // =====================================================================
@@ -156,18 +201,69 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     }
 
     // =====================================================================
-    // Expression resolution
+    // Deployed application accessing vault secrets
     // =====================================================================
 
     /**
-     * Stores a secret via add-alias, then resolves a {@code ${HC_VAULT::store:alias}} expression through
-     * the WildFly management API {@code :resolve-expression} operation, verifying the expression resolver
-     * returns the stored secret value.
+     * Stores a secret via the management API, then verifies a deployed servlet can retrieve it at runtime
+     * through the credential store service. This validates that secrets stored in Vault are accessible
+     * from deployed applications — the core user scenario.
      */
     @Test
-    public void testExpressionResolutionReturnsStoredSecret(@ArquillianResource ManagementClient managementClient) throws IOException {
-        String alias = "secret/crud.expression_test";
-        String secretValue = "resolved-secret-42";
+    public void testSecretAccessibleFromDeployedApplication(@ArquillianResource ManagementClient managementClient) throws Exception {
+        String alias = "secret/crud.servlet_test";
+        String secretValue = "servlet-accessed-secret-42";
+
+        ModelNode addAlias = Util.createOperation(OP_ADD_ALIAS, CREDENTIAL_STORE_ADDRESS);
+        addAlias.get(ATTR_ALIAS).set(alias);
+        addAlias.get(ATTR_SECRET_VALUE).set(secretValue);
+        ModelNode addResult = executeOperation(managementClient, addAlias);
+        assertEquals(SUCCESS, addResult.get(OUTCOME).asString(), "add-alias should succeed: " + addResult);
+
+        try {
+            URI servletUri = URI.create("http://127.0.0.1:8080/vault-crud-test/vault-secret"
+                    + "?store=" + CREDENTIAL_STORE_NAME + "&alias=" + alias);
+            HttpResponse<String> response = HttpClient.newHttpClient()
+                    .send(HttpRequest.newBuilder(servletUri).GET().build(), HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, response.statusCode(),
+                    "Servlet should return 200; body: " + response.body());
+            assertEquals(secretValue, response.body(),
+                    "Servlet should return the stored secret value");
+        } finally {
+            ModelNode removeAlias = Util.createOperation(OP_REMOVE_ALIAS, CREDENTIAL_STORE_ADDRESS);
+            removeAlias.get(ATTR_ALIAS).set(alias);
+            executeOperation(managementClient, removeAlias);
+        }
+    }
+
+    /**
+     * Verifies the deployed servlet returns 404 when the requested alias does not exist in the credential store.
+     */
+    @Test
+    public void testDeployedApplicationReturnsNotFoundForMissingAlias(@ArquillianResource ManagementClient managementClient) throws Exception {
+        URI servletUri = URI.create("http://127.0.0.1:8080/vault-crud-test/vault-secret"
+                + "?store=" + CREDENTIAL_STORE_NAME + "&alias=secret/crud.nonexistent_alias");
+        HttpResponse<String> response = HttpClient.newHttpClient()
+                .send(HttpRequest.newBuilder(servletUri).GET().build(), HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(404, response.statusCode(),
+                "Servlet should return 404 for non-existent alias; body: " + response.body());
+    }
+
+    // =====================================================================
+    // Expression resolution security
+    // =====================================================================
+
+    /**
+     * Verifies the global {@code :resolve-expression} operation does <b>not</b> resolve {@code ${HC_VAULT::...}}
+     * expressions. This is a security design requirement: the management API must not leak secrets through
+     * expression resolution (see analysis document, Security Considerations).
+     */
+    @Test
+    public void testResolveExpressionDoesNotLeakSecret(@ArquillianResource ManagementClient managementClient) throws IOException {
+        String alias = "secret/crud.leak_test";
+        String secretValue = "must-not-leak";
 
         ModelNode addAlias = Util.createOperation(OP_ADD_ALIAS, CREDENTIAL_STORE_ADDRESS);
         addAlias.get(ATTR_ALIAS).set(alias);
@@ -180,10 +276,11 @@ public class HashiCorpVaultCrudIntegrationTestCase {
             ModelNode resolveOp = Util.createOperation(OP_RESOLVE_EXPRESSION, PathAddress.EMPTY_ADDRESS);
             resolveOp.get("expression").set(expression);
             ModelNode resolveResult = executeOperation(managementClient, resolveOp);
-            assertEquals(SUCCESS, resolveResult.get(OUTCOME).asString(),
-                    "resolve-expression should succeed: " + resolveResult);
-            assertEquals(secretValue, resolveResult.get(RESULT).asString(),
-                    "Resolved expression should match the stored secret value");
+
+            // The operation may succeed (returning the literal) or fail — either way the secret must not appear
+            String resultString = resolveResult.get(RESULT).asStringOrNull();
+            assertFalse(secretValue.equals(resultString),
+                    "resolve-expression must NOT return the secret value — would leak credentials via management API");
         } finally {
             ModelNode removeAlias = Util.createOperation(OP_REMOVE_ALIAS, CREDENTIAL_STORE_ADDRESS);
             removeAlias.get(ATTR_ALIAS).set(alias);
@@ -253,21 +350,6 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 "add-alias without secret-value should fail: " + result);
     }
 
-    /**
-     * Resolving an expression that references an alias not present in the credential store should fail.
-     */
-    @Test
-    public void testExpressionResolutionFailsForMissingAlias(@ArquillianResource ManagementClient managementClient) throws IOException {
-        String expression = "${HC_VAULT::" + CREDENTIAL_STORE_NAME + ":secret/crud.nonexistent_key}";
-        ModelNode resolveOp = Util.createOperation(OP_RESOLVE_EXPRESSION, PathAddress.EMPTY_ADDRESS);
-        resolveOp.get("expression").set(expression);
-        ModelNode result = executeOperation(managementClient, resolveOp);
-        assertEquals("failed", result.get(OUTCOME).asString(),
-                "resolve-expression for missing alias should fail: " + result);
-        assertTrue(result.get(FAILURE_DESCRIPTION).asString().contains("not found"),
-                "Should mention 'not found': " + result.get(FAILURE_DESCRIPTION).asString());
-    }
-
     // =====================================================================
     // Credential store add / remove lifecycle
     // =====================================================================
@@ -306,6 +388,61 @@ public class HashiCorpVaultCrudIntegrationTestCase {
 
     private static ModelNode executeOperation(ManagementClient client, ModelNode operation) throws IOException {
         return client.getControllerClient().execute(operation);
+    }
+
+    // =====================================================================
+    // Servlet — deployed to WildFly, accesses credential store at runtime
+    // =====================================================================
+
+    /**
+     * Servlet that retrieves a secret from a HashiCorp Vault credential store via the MSC service registry.
+     * Deployed inside WildFly as part of the test WAR so that credential resolution happens at RUNTIME,
+     * validating the full end-to-end path from Vault to a deployed application.
+     *
+     * <p>Query parameters:
+     * <ul>
+     *   <li>{@code store} -- credential store name (as defined in the hashicorp-vault subsystem)</li>
+     *   <li>{@code alias} -- alias of the secret to retrieve</li>
+     * </ul>
+     *
+     * <p>Returns the clear-text secret as {@code text/plain} with HTTP 200, or 404 if the alias is not found.
+     */
+    public static class VaultSecretServlet extends HttpServlet {
+
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+            String storeName = req.getParameter("store");
+            String alias = req.getParameter("alias");
+            resp.setContentType("text/plain");
+
+            try {
+                // Capability name from CredentialStoreDefinition.CREDENTIAL_STORE_RUNTIME_CAPABILITY
+                // Hardcoded to avoid module dependency on org.wildfly.extension.hashicorp-vault
+                ServiceName serviceName = ServiceName.parse("org.wildfly.security.credential-store")
+                        .append(storeName);
+                ServiceController<?> controller = CurrentServiceContainer.getServiceContainer()
+                        .getService(serviceName);
+                if (controller == null) {
+                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    resp.getWriter().write("STORE_NOT_FOUND");
+                    return;
+                }
+
+                CredentialStore store = (CredentialStore) controller.getValue();
+                PasswordCredential credential = store.retrieve(alias, PasswordCredential.class);
+                if (credential == null) {
+                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    resp.getWriter().write("ALIAS_NOT_FOUND");
+                    return;
+                }
+
+                ClearPassword clearPassword = credential.getPassword(ClearPassword.class);
+                resp.getWriter().write(new String(clearPassword.getPassword()));
+            } catch (Exception e) {
+                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                resp.getWriter().write(e.getClass().getName() + ": " + e.getMessage());
+            }
+        }
     }
 
     // =====================================================================

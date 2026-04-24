@@ -176,6 +176,47 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>create-test-jar</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>create-empty-source-jar</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>sources</classifier>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>create-empty-javadoc-jar</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>javadoc</classifier>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Provision traditional unzipped server installations -->
             <plugin>
                 <groupId>org.wildfly.plugins</groupId>
@@ -308,7 +349,8 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Skip deploying testsuite: test-only module has no main sources/javadoc, and test artifacts are not published to the repo for now -->
+            <!-- Skip deploying testsuite to the repository by default (integration tests only). -->
+            <!-- If you enable deploy for a release, *-sources / *-javadoc classifiers and test sources are attached (see maven-jar-plugin and maven-source-plugin test-jar above). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>

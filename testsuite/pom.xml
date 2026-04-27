@@ -349,13 +349,12 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Skip deploying testsuite to the repository by default (integration tests only). -->
-            <!-- If you enable deploy for a release, *-sources / *-javadoc classifiers and test sources are attached (see maven-jar-plugin and maven-source-plugin test-jar above). -->
+            <!-- Deploy testsuite artifacts (including *-sources/*-javadoc and test sources) when running deploy. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
                 <configuration>
-                    <skip>true</skip>
+                    <skip>false</skip>
                 </configuration>
             </plugin>
         </plugins>

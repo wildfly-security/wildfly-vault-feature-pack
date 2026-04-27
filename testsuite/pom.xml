@@ -33,7 +33,7 @@
         <as.debug.port>8787</as.debug.port>
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
-        <server.jboss.args>--stability=community</server.jboss.args>
+        <server.jboss.args>--stability=default</server.jboss.args>
         <!-- Feature pack to use to provision vault -->
         <vault.feature.pack.groupId>${project.groupId}</vault.feature.pack.groupId>
         <vault.feature.pack.artifactId>wildfly-vault-feature-pack</vault.feature.pack.artifactId>
@@ -229,8 +229,8 @@
                     <galleon-options>
                         <jboss-fork-embedded>${galleon.fork.embedded}</jboss-fork-embedded>
                         <optional-packages>passive+</optional-packages>
-                        <config-stability-level>community</config-stability-level>
-                        <package-stability-level>community</package-stability-level>
+                        <config-stability-level>default</config-stability-level>
+                        <package-stability-level>default</package-stability-level>
                     </galleon-options>
                 </configuration>
                 <executions>

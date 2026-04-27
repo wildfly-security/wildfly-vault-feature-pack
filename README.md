@@ -39,10 +39,10 @@ galleon install org.wildfly.security.vault:wildfly-vault-feature-pack:1.0.0.Alph
   --dir=wildfly
 ```
 
-Start WildFly with community stability:
+Start WildFly with default stability:
 
 ```bash
-./wildfly/bin/standalone.sh --stability=community
+./wildfly/bin/standalone.sh --stability=default
 ```
 
 ### Subsystem configuration (XML)
@@ -50,7 +50,7 @@ Start WildFly with community stability:
 Minimal HTTP Vault URL:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:default:1.0">
     <credential-store name="my-vault"
                       host-address="http://localhost:8200">
         <credential-reference clear-text="myroot"/>
@@ -61,7 +61,7 @@ Minimal HTTP Vault URL:
 For **HTTPS**, TLS trust and optional client authentication are configured in **Elytron**, not on the credential store. Use **`authentication-context`** with an Elytron client context name:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:default:1.0">
     <credential-store name="secure-vault"
                       host-address="https://vault.example.com:8200"
                       authentication-context="vault-tls-context">

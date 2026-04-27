@@ -26,7 +26,7 @@ public final class VaultExtension implements Extension {
      * The name of our subsystem within the model.
      */
     static final String SUBSYSTEM_NAME = "hashicorp-vault";
-    private static final Stability FEATURE_STABILITY = Stability.COMMUNITY;
+    private static final Stability FEATURE_STABILITY = Stability.DEFAULT;
     static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(1, 0, 0);
 
     static final PathElement SUBSYSTEM_PATH = PathElement.pathElement(SUBSYSTEM, SUBSYSTEM_NAME);

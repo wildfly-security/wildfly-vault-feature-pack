@@ -19,12 +19,12 @@ import java.io.IOException;
 public class SubsystemTestCase extends AbstractSubsystemBaseTest {
 
     public SubsystemTestCase() {
-        super(SUBSYSTEM_NAME, new VaultExtension(), Stability.COMMUNITY);
+        super(SUBSYSTEM_NAME, new VaultExtension(), Stability.DEFAULT);
     }
 
     @Override
     protected AdditionalInitialization createAdditionalInitialization() {
-        return new AdditionalInitialization.ManagementAdditionalInitialization(Stability.COMMUNITY);
+        return new AdditionalInitialization.ManagementAdditionalInitialization(Stability.DEFAULT);
     }
 
     @Override

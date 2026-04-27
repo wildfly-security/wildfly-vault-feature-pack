@@ -20,7 +20,7 @@ vault kv put secret/database username=dbuser password=secretpass
 Add the Vault subsystem to your `standalone.xml`:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:default:1.0">
     <credential-store name="my-vault"
                       host-address="http://localhost:8200">
         <credential-reference clear-text="myroot"/>
@@ -31,7 +31,7 @@ Add the Vault subsystem to your `standalone.xml`:
 For **HTTPS** Vault URLs, TLS trust (and optional client authentication) is **not** configured on the credential store itself. Point `host-address` at `https://…` and set **`authentication-context`** to the name of an Elytron **authentication-context** that defines how the management/client SSL connection to Vault is secured (trust store, client certificate, etc.):
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:community:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:default:1.0">
     <credential-store name="secure-vault"
                       host-address="https://vault.example.com:8200"
                       authentication-context="vault-tls-context">

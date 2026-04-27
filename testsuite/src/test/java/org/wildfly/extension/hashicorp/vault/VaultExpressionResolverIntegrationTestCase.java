@@ -71,7 +71,7 @@ public class VaultExpressionResolverIntegrationTestCase extends SubsystemJUnit5T
 
     @Override
     protected AdditionalInitialization createAdditionalInitialization() {
-        return new AdditionalInitialization.ManagementAdditionalInitialization(Stability.COMMUNITY) {
+        return new AdditionalInitialization.ManagementAdditionalInitialization(Stability.DEFAULT) {
             @Override
             protected org.jboss.as.controller.RunningMode getRunningMode() {
                 return org.jboss.as.controller.RunningMode.NORMAL;
@@ -82,7 +82,7 @@ public class VaultExpressionResolverIntegrationTestCase extends SubsystemJUnit5T
     @Override
     protected String getSubsystemXml() {
         String hostAddress = vault.getHttpHostAddress();
-        return "<subsystem xmlns=\"urn:wildfly:hashicorp-vault:community:1.0\">\n"
+        return "<subsystem xmlns=\"urn:wildfly:hashicorp-vault:default:1.0\">\n"
                 + "    <credential-store name=\"" + CREDENTIAL_STORE_NAME + "\" host-address=\"" + hostAddress + "\">\n"
                 + "        <credential-reference clear-text=\"" + VAULT_TOKEN + "\"/>\n"
                 + "    </credential-store>\n"

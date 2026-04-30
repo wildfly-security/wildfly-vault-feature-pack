@@ -114,12 +114,6 @@
             </dependency>
 
             <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-vault</artifactId>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>wildfly-vault-galleon-shared</artifactId>
                 <version>${project.version}</version>

@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven Toolchains Configuration Template for WildFly Vault Feature Pack
+
+  This file configures multiple JDK installations for multi-version testing.
+
+  SETUP INSTRUCTIONS:
+
+  1. Copy this file to ~/.m2/toolchains.xml:
+     cp toolchains.xml.template ~/.m2/toolchains.xml
+
+  2. Update the &lt;jdkHome&gt; paths to match your local JDK installations
+
+  3. Verify configuration:
+     mvn toolchains:display-toolchains
+
+  RECOMMENDED: Use SDKMAN for JDK management
+
+  Install SDKMAN:
+    curl -s "https://get.sdkman.io" | bash
+    source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+  Install required JDKs:
+    # Temurin (Eclipse Adoptium - HotSpot JVM)
+    sdk install java 17.0.13-tem
+    sdk install java 21.0.5-tem
+    sdk install java 25.0.0-tem
+
+    # Semeru (IBM - OpenJ9 JVM)
+    sdk install java 17.0.13-sem
+    sdk install java 21.0.5-sem
+    sdk install java 25.0.0-sem
+
+  Set Java 25 as default for Maven execution:
+    sdk default java 25.0.0-tem
+    export JAVA_HOME=$HOME/.sdkman/candidates/java/current
+
+  USAGE:
+
+  Default build (uses JAVA_HOME - Java 25):
+    mvn clean install
+
+  Test with specific Java version:
+    mvn test -Djdk.test.version=17
+    mvn test -Djdk.test.version=21
+    mvn test -Djdk.test.version=25
+
+  Test with specific distribution:
+    mvn test -Djdk.test.version=21 -Djdk.test.vendor=semeru
+    mvn test -Djdk.test.version=21 -Djdk.test.vendor=temurin
+
+  Run all test permutations (requires profile in POM):
+    mvn install -Ptest-all-versions
+-->
+<toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0
+                                http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+
+  <!-- ========================================
+       Java 17 - Temurin (Eclipse Adoptium)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>17</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 17 Temurin installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/17.0.13-tem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/temurin-17-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
+           Windows: C:\Program Files\Eclipse Adoptium\jdk-17.0.13-hotspot
+      -->
+    </configuration>
+  </toolchain>
+
+  <!-- ========================================
+       Java 17 - Semeru (IBM OpenJ9)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>17</version>
+      <vendor>semeru</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 17 Semeru installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/17.0.13-sem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/semeru-17-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/semeru-17.jdk/Contents/Home
+           Windows: C:\Program Files\IBM\Semeru\jdk-17.0.13-openj9
+      -->
+    </configuration>
+  </toolchain>
+
+  <!-- ========================================
+       Java 21 - Temurin (Eclipse Adoptium)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>21</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 21 Temurin installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/21.0.5-tem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/temurin-21-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+           Windows: C:\Program Files\Eclipse Adoptium\jdk-21.0.5-hotspot
+      -->
+    </configuration>
+  </toolchain>
+
+  <!-- ========================================
+       Java 21 - Semeru (IBM OpenJ9)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>21</version>
+      <vendor>semeru</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 21 Semeru installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/21.0.5-sem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/semeru-21-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/semeru-21.jdk/Contents/Home
+           Windows: C:\Program Files\IBM\Semeru\jdk-21.0.5-openj9
+      -->
+    </configuration>
+  </toolchain>
+
+  <!-- ========================================
+       Java 25 - Temurin (Eclipse Adoptium)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>25</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 25 Temurin installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/25.0.0-tem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/temurin-25-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
+           Windows: C:\Program Files\Eclipse Adoptium\jdk-25.0.0-hotspot
+      -->
+    </configuration>
+  </toolchain>
+
+  <!-- ========================================
+       Java 25 - Semeru (IBM OpenJ9)
+       ======================================== -->
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>25</version>
+      <vendor>semeru</vendor>
+    </provides>
+    <configuration>
+      <!-- UPDATE THIS PATH to your Java 25 Semeru installation -->
+      <!-- SDKMAN example: -->
+      <jdkHome>${env.HOME}/.sdkman/candidates/java/25.0.0-sem</jdkHome>
+      <!-- Alternative paths:
+           Linux:   /usr/lib/jvm/semeru-25-jdk
+           macOS:   /Library/Java/JavaVirtualMachines/semeru-25.jdk/Contents/Home
+           Windows: C:\Program Files\IBM\Semeru\jdk-25.0.0-openj9
+      -->
+    </configuration>
+  </toolchain>
+
+</toolchains>

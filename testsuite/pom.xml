@@ -61,6 +61,12 @@
                 <artifactId>wildfly-arquillian-container-managed</artifactId>
                 <version>${version.org.wildfly.arquillian}</version>
                 <scope>test</scope>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.wildfly.core</groupId>
+                        <artifactId>wildfly-launcher</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -69,6 +75,12 @@
         <dependency>
             <groupId>org.wildfly.arquillian</groupId>
             <artifactId>wildfly-arquillian-container-managed</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wildfly.launcher</groupId>
+            <artifactId>wildfly-launcher</artifactId>
+            <version>${version.org.wildfly.launcher}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>

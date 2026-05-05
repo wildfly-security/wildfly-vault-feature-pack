@@ -69,6 +69,7 @@
         <version.org.testcontainers>2.0.2</version.org.testcontainers>
         <version.shrinkwrap.resolvers>3.1.4</version.shrinkwrap.resolvers>
         <version.org.jboss.shrinkwrap>1.2.6</version.org.jboss.shrinkwrap>
+        <version.org.wildfly.launcher>1.0.3.Final</version.org.wildfly.launcher>
         <version.org.wildfly.test>${version.org.wildfly}</version.org.wildfly.test>
 
         <!-- Nexus Settings -->
@@ -270,6 +271,36 @@
             </plugins>
         </pluginManagement>
     </build>
+    <profiles>
+        <profile>
+            <id>test-with-toolchain</id>
+            <activation>
+                <property>
+                    <name>jdk.test.version</name>
+                </property>
+            </activation>
+            <properties>
+                <jdk.test.vendor>temurin</jdk.test.vendor>
+            </properties>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-surefire-plugin</artifactId>
+                            <configuration>
+                                <jdkToolchain>
+                                    <version>${jdk.test.version}</version>
+                                    <vendor>${jdk.test.vendor}</vendor>
+                                </jdkToolchain>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
+
     <repositories>
         <repository>
             <releases>

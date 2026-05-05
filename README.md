@@ -16,18 +16,57 @@ This project provides a WildFly subsystem extension that enables integration wit
 
 ## Requirements
 
-- Java 17+
+- Java 25 for builds
 - Maven 3.6+
 - WildFly 36.0.1.Final or later
 - HashiCorp Vault server
 
 ## Building
 
-Build the project using Maven:
+Build the project using Maven with Java 25 on `PATH` and `JAVA_HOME`:
 
 ```bash
 mvn clean install
 ```
+
+## Local multi-JDK testing with Maven toolchains
+
+This project targets Java 17 bytecode. By default, tests run on the same JDK that is running Maven, as long as that JDK is Java 25 or later.
+
+If you want to run tests with a different JDK without changing your current `JAVA_HOME`, you can opt in to Maven toolchains:
+
+1. Copy the template into your Maven home:
+   ```bash
+   cp toolchains.xml.template ~/.m2/toolchains.xml
+   ```
+2. Edit `~/.m2/toolchains.xml` and update each `jdkHome` to match your local JDK installations.
+3. Verify Maven can see the configured toolchains:
+   ```bash
+   mvn toolchains:display-toolchains
+   ```
+
+Default behaviour using your current JDK:
+
+```bash
+mvn test
+```
+
+Opt in to a specific toolchain-managed JDK:
+
+```bash
+mvn test -Djdk.test.version=17
+mvn test -Djdk.test.version=21
+mvn test -Djdk.test.version=25
+```
+
+Select a specific distribution when using toolchains:
+
+```bash
+mvn test -Djdk.test.version=21 -Djdk.test.vendor=temurin
+mvn test -Djdk.test.version=21 -Djdk.test.vendor=semeru
+```
+
+Toolchains are activated only when `jdk.test.version` is set. If `jdk.test.vendor` is not specified, it defaults to `temurin`.
 
 ## Usage
 

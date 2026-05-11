@@ -4,6 +4,8 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
+import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
+
 import org.jboss.as.controller.AbstractAddStepHandler;
 import org.jboss.as.controller.AbstractRemoveStepHandler;
 import org.jboss.as.controller.AttributeDefinition;
@@ -223,7 +225,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             try {
                 CredentialReference.rollbackCredentialStoreUpdate(CREDENTIAL_REFERENCE, context, resource);
             } catch (Exception e) {
-                // Log but don't fail the rollback
+                HashiCorpVaultLogger.ROOT_LOGGER.credentialReferenceRollbackFailed(e);
             }
         }
         
@@ -252,18 +254,18 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                 authenticationContextServiceName = context.getCapabilityServiceName(acCapability, AuthenticationContext.class);
                 ServiceController<AuthenticationContext> authenticationContextServiceController = (ServiceController<AuthenticationContext>) context.getServiceRegistry(false).getService(authenticationContextServiceName);
                 if (authenticationContextServiceController == null) {
-                    throw new OperationFailedException("Authentication context '" + authenticationContextName + "' not found");
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.authenticationContextNotFound(authenticationContextName);
                 }
                 AuthenticationContext authenticationContext = authenticationContextServiceController.getValue();
                 if (authenticationContext == null) {
-                    throw new OperationFailedException("Authentication context '" + authenticationContextName + "' not available");
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.authenticationContextNotAvailable(authenticationContextName);
                 }
                 try {
                     URI vaultUri = URI.create(hostnameNode.asString());
                     AuthenticationContextConfigurationClient authenticationContextConfigurationClient = AccessController.doPrivileged((PrivilegedAction<AuthenticationContextConfigurationClient>) AuthenticationContextConfigurationClient.ACTION);
                     sslContext = authenticationContextConfigurationClient.getSSLContext(vaultUri, authenticationContext);
                 } catch (GeneralSecurityException e) {
-                    throw new OperationFailedException("Failed to obtain SSLContext from authentication context '" + authenticationContextName + "'", e);
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.sslContextFromAuthenticationContextFailed(authenticationContextName, e);
                 }
             }
 
@@ -287,7 +289,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                                 }
                             }
                         } catch (IOException e) {
-                            throw new OperationFailedException("Failed to obtain credential from credential-reference", e);
+                            throw HashiCorpVaultLogger.ROOT_LOGGER.failedToObtainCredentialFromReference(e);
                         }
                     }
                     
@@ -330,9 +332,9 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     serviceBuilder.install();
                 
             } catch (CredentialStoreException e) {
-                throw new OperationFailedException("Failed to initialize HashiCorp Vault credential store: " + e.getMessage(), e);
+                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeHashiCorpVaultCredentialStore(e.getMessage(), e);
             } catch (Exception e) {
-                throw new OperationFailedException("Failed to initialize credential store service: " + e.getMessage(), e);
+                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeCredentialStoreService(e.getMessage(), e);
             }
         }
     };
@@ -370,7 +372,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
 
                 List<Class<? extends CredentialStoreExtension>> supportedTypes = credentialStore.getSupportedExtensionTypes();
                 if (!supportedTypes.contains(HashicorpVaultCredentialStoreExtension.class)) {
-                    throw new UnsupportedOperationException();
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.vaultCredentialStoreExtensionNotSupported();
                 }
                 HashicorpVaultCredentialStoreExtension hccse = credentialStore.getExtensionInstance(HashicorpVaultCredentialStoreExtension.class);
                 aliases = hccse.getAliases(path, recursive, recursiveDepth, maxNumberOfAliases);
@@ -382,7 +384,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             }
             context.getResult().set(list);
         } catch (CredentialStoreException e) {
-            throw new OperationFailedException("Unable to read aliases: " + e.getMessage(), e);
+            throw HashiCorpVaultLogger.ROOT_LOGGER.unableToReadAliases(e.getMessage(), e);
         }
     }
 
@@ -392,7 +394,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             String secretValue = SECRET_VALUE.resolveModelAttribute(context, operation).asStringOrNull();
             
             if (credentialStore.exists(alias, PasswordCredential.class)) {
-                throw new OperationFailedException("Credential alias '" + alias + "' already exists");
+                throw HashiCorpVaultLogger.ROOT_LOGGER.credentialAliasAlreadyExists(alias);
             }
             
             if (secretValue != null) {
@@ -400,12 +402,12 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                 credentialStore.store(alias, credential);
                 credentialStore.flush();
             } else {
-                throw new OperationFailedException("Secret value is required");
+                throw HashiCorpVaultLogger.ROOT_LOGGER.secretValueRequired();
             }
         } catch (UnsupportedCredentialTypeException e) {
-            throw new OperationFailedException("Unsupported credential type: " + e.getMessage(), e);
+            throw HashiCorpVaultLogger.ROOT_LOGGER.unsupportedCredentialType(e.getMessage(), e);
         } catch (CredentialStoreException e) {
-            throw new OperationFailedException("Unable to add alias: " + e.getMessage(), e);
+            throw HashiCorpVaultLogger.ROOT_LOGGER.unableToAddAlias(e.getMessage(), e);
         }
     }
 
@@ -414,13 +416,13 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             String alias = ALIAS.resolveModelAttribute(context, operation).asString();
             
             if (!credentialStore.exists(alias, PasswordCredential.class)) {
-                throw new OperationFailedException("Credential alias '" + alias + "' does not exist");
+                throw HashiCorpVaultLogger.ROOT_LOGGER.credentialAliasDoesNotExist(alias);
             }
             
             credentialStore.remove(alias, PasswordCredential.class);
             credentialStore.flush();
         } catch (CredentialStoreException e) {
-            throw new OperationFailedException("Unable to remove alias: " + e.getMessage(), e);
+            throw HashiCorpVaultLogger.ROOT_LOGGER.unableToRemoveAlias(e.getMessage(), e);
         }
     }
 
@@ -446,12 +448,12 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     ServiceController<?> serviceController = serviceRegistry.getService(serviceName);
                     
                     if (serviceController == null) {
-                        throw new OperationFailedException("Credential store '" + name + "' not found or not started");
+                        throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreResourceNotFound(name);
                     }
                     
                     CredentialStore credentialStore = (CredentialStore) serviceController.getValue();
                     if (credentialStore == null) {
-                        throw new OperationFailedException("Credential store '" + name + "' not available");
+                        throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreResourceNotAvailable(name);
                     }
                     
                     RuntimeOperationHandler.this.operation.execute(context, operation, credentialStore);

@@ -4,6 +4,7 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
+import org.jboss.logging.Logger;
 import org.testcontainers.containers.output.BaseConsumer;
 import org.testcontainers.containers.output.OutputFrame;
 
@@ -11,6 +12,8 @@ import org.testcontainers.containers.output.OutputFrame;
  * Prefixes Vault container log lines for easier correlation in test output.
  */
 public class VaultContainerLogConsumer extends BaseConsumer<VaultContainerLogConsumer> {
+
+    private static final Logger LOG = Logger.getLogger(VaultContainerLogConsumer.class);
 
     private final String prefix;
 
@@ -25,7 +28,7 @@ public class VaultContainerLogConsumer extends BaseConsumer<VaultContainerLogCon
         }
         String line = outputFrame.getUtf8StringWithoutLineEnding();
         if (line != null && !line.isEmpty()) {
-            System.out.println("[" + prefix + "] " + line);
+            LOG.infof("[%s] %s", prefix, line);
         }
     }
 }

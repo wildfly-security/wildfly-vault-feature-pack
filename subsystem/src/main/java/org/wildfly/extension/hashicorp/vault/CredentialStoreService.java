@@ -4,6 +4,8 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
+import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
+
 import org.jboss.msc.service.Service;
 import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
@@ -92,7 +94,7 @@ public class CredentialStoreService implements Service<CredentialStore> {
 
             List<Class<? extends CredentialStoreExtension>> supportedTypes = credentialStore.getSupportedExtensionTypes();
             if (!supportedTypes.contains(HashicorpVaultCredentialStoreExtension.class)) {
-                throw new StartException("Failed to create and initialize HC Vault CredentialStore.");
+                throw HashiCorpVaultLogger.ROOT_LOGGER.hcVaultCredentialStoreExtensionMissing();
             }
 
             HashicorpVaultCredentialStoreExtension hashicorpVaultCredentialStoreExtension = credentialStore.getExtensionInstance(HashicorpVaultCredentialStoreExtension.class);
@@ -110,7 +112,7 @@ public class CredentialStoreService implements Service<CredentialStore> {
                 credentialStoreConsumer.accept(credentialStore);
             }
         } catch (Exception e) {
-            throw new StartException("Failed to create and initialize CredentialStore: " + e.getMessage(), e);
+            throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStartFailed(e);
         }
     }
     
@@ -120,7 +122,7 @@ public class CredentialStoreService implements Service<CredentialStore> {
             try {
                 credentialStore.flush();
             } catch (Exception e) {
-                throw new RuntimeException("Failed to stop Credential store service");
+                throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStopFailed(e);
             }
         }
         credentialStore = null;
@@ -129,7 +131,7 @@ public class CredentialStoreService implements Service<CredentialStore> {
     @Override
     public CredentialStore getValue() throws IllegalStateException {
         if (credentialStore == null) {
-            throw new IllegalStateException("CredentialStore service not started");
+            throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreServiceNotStarted();
         }
         return credentialStore;
     }

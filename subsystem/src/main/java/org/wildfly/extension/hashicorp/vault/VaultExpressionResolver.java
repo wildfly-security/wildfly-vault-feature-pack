@@ -8,6 +8,8 @@ package org.wildfly.extension.hashicorp.vault;
 import static org.jboss.as.controller.security.CredentialReference.CREDENTIAL_STORE_CAPABILITY;
 import static org.wildfly.common.Assert.checkNotNullParam;
 
+import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
+
 import org.jboss.as.controller.ExpressionResolver;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.extension.ExpressionResolverExtension;
@@ -63,12 +65,12 @@ public final class VaultExpressionResolver implements ExpressionResolverExtensio
 
         if (alias.isEmpty()) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Invalid VAULT expression: alias is empty in " + expression);
+                    HashiCorpVaultLogger.ROOT_LOGGER.invalidVaultExpressionEmptyAlias(expression));
         }
 
         if (context.getCurrentStage() == OperationContext.Stage.MODEL) {
             throw new ExpressionResolver.ExpressionResolutionServerException(
-                    "VAULT expression resolution is not supported in MODEL stage");
+                    HashiCorpVaultLogger.ROOT_LOGGER.vaultExpressionResolutionNotSupportedInModelStage());
         }
 
         CredentialStore credentialStore = getCredentialStore(context, credentialStoreName, expression);
@@ -79,12 +81,12 @@ public final class VaultExpressionResolver implements ExpressionResolverExtensio
             credential = credentialStore.retrieve(alias, PasswordCredential.class);
         } catch (CredentialStoreException e) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Failed to retrieve alias '" + alias + "' from credential store '" + credentialStoreName + "': " + e.getMessage(), e);
+                    HashiCorpVaultLogger.ROOT_LOGGER.failedToRetrieveAliasFromCredentialStore(alias, credentialStoreName, e.getMessage()), e);
         }
 
         if (credential == null) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Alias '" + alias + "' not found in credential store '" + credentialStoreName + "' for expression: " + expression);
+                    HashiCorpVaultLogger.ROOT_LOGGER.aliasNotFoundInCredentialStore(alias, credentialStoreName, expression));
         }
 
         return getPasswordFromObtainedCredential(credential, alias, credentialStoreName);
@@ -97,24 +99,24 @@ public final class VaultExpressionResolver implements ExpressionResolverExtensio
             ServiceRegistry registry = context.getServiceRegistry(false);
             if (registry == null) {
                 throw new ExpressionResolver.ExpressionResolutionServerException(
-                        "Service registry is not available for VAULT expression resolution");
+                        HashiCorpVaultLogger.ROOT_LOGGER.serviceRegistryUnavailableForVaultExpression());
             }
             ServiceController<?> controller = registry.getService(serviceName);
             if (controller == null) {
                 throw new ExpressionResolver.ExpressionResolutionUserException(
-                        "Credential store '" + credentialStoreName + "' is not installed for the expression: " + expression);
+                        HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreNotInstalled(credentialStoreName, expression));
             }
             Object value = controller.getValue();
             if (value == null) {
                 throw new ExpressionResolver.ExpressionResolutionUserException(
-                        "Credential store service '" + credentialStoreName + "' has not started for the expression: " + expression);
+                        HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreServiceNotStartedForExpression(credentialStoreName, expression));
             }
             credentialStore = (CredentialStore) value;
         } catch (ExpressionResolver.ExpressionResolutionUserException | ExpressionResolver.ExpressionResolutionServerException e) {
             throw e;
         } catch (IllegalArgumentException e) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Credential store '" + credentialStoreName + "' is not available: " + e.getMessage(), e);
+                    HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreNotAvailableDetail(credentialStoreName, e.getMessage()), e);
         }
         return credentialStore;
     }
@@ -123,12 +125,12 @@ public final class VaultExpressionResolver implements ExpressionResolverExtensio
         Password password = credential.getPassword();
         if (password == null) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Credential for alias '" + alias + "' in credential store '" + credentialStoreName + "' has no password");
+                    HashiCorpVaultLogger.ROOT_LOGGER.credentialHasNoPassword(alias, credentialStoreName));
         }
 
         if (!(password instanceof ClearPassword)) {
             throw new ExpressionResolver.ExpressionResolutionUserException(
-                    "Credential for alias '" + alias + "' in credential store '" + credentialStoreName + "' is not of a type clear password");
+                    HashiCorpVaultLogger.ROOT_LOGGER.credentialNotClearPassword(alias, credentialStoreName));
         }
         return new String((((ClearPassword) password).getPassword()));
     }

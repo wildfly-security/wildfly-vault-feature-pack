@@ -27,8 +27,8 @@ import org.jboss.as.version.Stability;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceContainer;
 import org.jboss.msc.service.ServiceName;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.utility.DockerImageName;
@@ -49,8 +49,11 @@ public class VaultExpressionResolverIntegrationTestCase extends SubsystemJUnit5T
     private KernelServices kernelServices;
     private VaultExpressionResolver resolver;
 
-    @BeforeAll
-    public static void startVault() {
+    /** Starts Testcontainers Vault once (also from {@link #getSubsystemXml()} when JUnit Platform skips {@code @BeforeClass}). */
+    private static synchronized void ensureVaultStarted() {
+        if (vault != null) {
+            return;
+        }
         vault = new VaultContainer<>(DockerImageName.parse("hashicorp/vault:1.21"))
                 .withVaultToken(VAULT_TOKEN)
                 .withInitCommand(
@@ -62,10 +65,16 @@ public class VaultExpressionResolverIntegrationTestCase extends SubsystemJUnit5T
         vault.start();
     }
 
-    @AfterAll
+    @BeforeClass
+    public static void startVault() {
+        ensureVaultStarted();
+    }
+
+    @AfterClass
     public static void stopVault() {
         if (vault != null) {
             vault.stop();
+            vault = null;
         }
     }
 
@@ -81,6 +90,7 @@ public class VaultExpressionResolverIntegrationTestCase extends SubsystemJUnit5T
 
     @Override
     protected String getSubsystemXml() {
+        ensureVaultStarted();
         String hostAddress = vault.getHttpHostAddress();
         return "<subsystem xmlns=\"urn:wildfly:hashicorp-vault:community:1.0\">\n"
                 + "    <credential-store name=\"" + CREDENTIAL_STORE_NAME + "\" host-address=\"" + hostAddress + "\">\n"

@@ -17,7 +17,7 @@
     Maintain separation between the artifact id and the version to help prevent
     merge conflicts between commits changing the GA and those changing the V.
     -->
-    <version>1.0.1.CR1</version>
+    <version>1.0.1.CR2-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>WildFly Vault Feature Pack -- Parent</name>
@@ -99,7 +99,7 @@
         <connection>scm:git:git@github.com:wildfly-security/wildfly-vault-feature-pack.git</connection>
         <developerConnection>scm:git:git@github.com:wildfly-security/wildfly-vault-feature-pack</developerConnection>
         <url>https://github.com/wildfly-security/wildfly-vault-feature-pack</url>
-        <tag>1.0.1.CR1</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <dependencyManagement>

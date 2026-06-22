@@ -161,13 +161,27 @@
         </dependencies>
     </dependencyManagement>
 
-    <modules>
-        <module>galleon-local</module>
-        <module>galleon-shared</module>
-        <module>subsystem</module>
-        <module>feature-pack</module>
-        <module>testsuite</module>
-    </modules>
+    <profiles>
+        <profile>
+            <id>subsystem-only</id>
+            <modules>
+                <module>subsystem</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>feature-pack</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <modules>
+                <module>galleon-local</module>
+                <module>galleon-shared</module>
+                <module>subsystem</module>
+                <module>feature-pack</module>
+                <module>testsuite</module>
+            </modules>
+        </profile>
+    </profiles>
 
     <build>
         <!-- Parent POM is otherwise only installed in the install phase; forked build-feature-pack
@@ -186,6 +200,13 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
             </plugin>
         </plugins>
         <pluginManagement>

@@ -20,8 +20,8 @@
     <artifactId>wildfly-vault-tests</artifactId>
     <packaging>jar</packaging>
 
-    <name>WildFly Vault Feature Pack -- Testsuite</name>
-    <description>WildFly Vault Feature Pack TestSuite</description>
+    <name>WildFly Vault Feature-Pack -- Testsuite</name>
+    <description>WildFly Vault Feature-Pack TestSuite</description>
 
     <properties>
 
@@ -34,7 +34,7 @@
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
         <server.jboss.args>--stability=default</server.jboss.args>
-        <!-- Feature pack to use to provision vault -->
+        <!-- Feature-pack to use to provision vault -->
         <vault.feature.pack.groupId>${project.groupId}</vault.feature.pack.groupId>
         <vault.feature.pack.artifactId>wildfly-vault-feature-pack</vault.feature.pack.artifactId>
         <vault.feature.pack.version>${project.version}</vault.feature.pack.version>
@@ -374,7 +374,7 @@
     </build>
     <profiles>
 
-        <!-- Default single feature pack provisioning -->
+        <!-- Default single feature-pack provisioning -->
         <profile>
             <id>default.provisioning.profile</id>
             <activation>

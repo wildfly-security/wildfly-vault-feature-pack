@@ -1,4 +1,4 @@
-# Releasing WildFly Vault Feature Pack
+# Releasing WildFly Vault Feature-Pack
 
 To release, first checkout the project and ensure you are on the latest commit for the branch you are releasing with no local changes.
 

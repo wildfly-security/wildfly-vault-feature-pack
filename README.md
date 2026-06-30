@@ -1,6 +1,6 @@
-# WildFly Vault Feature Pack
+# WildFly Vault Feature-Pack
 
-A Galleon feature pack providing an ability to create WildFly credential store resources backed by an external vendor specific vaults.
+A Galleon feature-pack providing an ability to create WildFly credential store resources backed by an external vendor specific vaults.
 
 ## Overview
 
@@ -95,7 +95,7 @@ This is useful for:
 
 ## Usage
 
-After building, you can provision a WildFly server with the HashiCorp Vault feature pack using Galleon:
+After building, you can provision a WildFly server with the HashiCorp Vault feature-pack using Galleon:
 
 ```bash
 galleon install org.wildfly.security.vault:wildfly-vault-feature-pack:1.0.0.Alpha5-SNAPSHOT \

@@ -17,7 +17,7 @@
     <artifactId>wildfly-vault-subsystem</artifactId>
     <packaging>jar</packaging>
 
-    <name>WildFly Vault Feature Pack -- Subsystem</name>
+    <name>WildFly Vault Feature-Pack -- Subsystem</name>
     <description>WildFly subsystem for credential stores backed by external vaults</description>
 
     <build>

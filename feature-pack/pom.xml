@@ -15,8 +15,8 @@
     <artifactId>wildfly-vault-feature-pack</artifactId>
     <packaging>pom</packaging>
 
-    <name>WildFly Vault Feature Pack</name>
-    <description>WildFly feature pack for credential stores backed by external vaults</description>
+    <name>WildFly Vault Feature-Pack</name>
+    <description>WildFly feature-pack for credential stores backed by external vaults</description>
 
     <properties>
         <galleon.local.resources.directory>${project.basedir}/../galleon-local/src/main/resources</galleon.local.resources.directory>

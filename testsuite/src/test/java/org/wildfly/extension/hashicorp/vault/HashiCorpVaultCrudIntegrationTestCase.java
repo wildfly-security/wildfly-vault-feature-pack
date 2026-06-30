@@ -53,9 +53,9 @@ import org.wildfly.security.password.interfaces.ClearPassword;
 
 /**
  * End-to-end Arquillian integration test that exercises the full credential store CRUD lifecycle against a real
- * WildFly server provisioned with the hashicorp-vault feature pack, backed by a Testcontainers Vault instance.
+ * WildFly server provisioned with the hashicorp-vault feature-pack, backed by a Testcontainers Vault instance.
  * <p>
- * Covers the user workflow: provision WildFly with feature pack &rarr; add credential store &rarr;
+ * Covers the user workflow: provision WildFly with feature-pack &rarr; add credential store &rarr;
  * add/read/remove aliases &rarr; verify secrets are accessible from a deployed application &rarr;
  * error handling for duplicates and missing aliases.
  */

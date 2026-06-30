@@ -20,8 +20,8 @@
     <version>1.1.0.CR2-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>WildFly Vault Feature Pack -- Parent</name>
-    <description>Parent pom for producing a Galleon feature pack for including support for credential stores backed by external vaults into a WildFly installation.</description>
+    <name>WildFly Vault Feature-Pack -- Parent</name>
+    <description>Parent pom for producing a Galleon feature-pack for including support for credential stores backed by external vaults into a WildFly installation.</description>
 
     <licenses>
         <license>

@@ -20,8 +20,8 @@
     <artifactId>wildfly-vault-galleon-shared</artifactId>
     <packaging>pom</packaging>
 
-    <name>WildFly Vault Feature Pack -- Shared Galleon Content</name>
-    <description>Galleon content for a feature pack that provides credential stores backed by external vaults</description>
+    <name>WildFly Vault Feature-Pack -- Shared Galleon Content</name>
+    <description>Galleon content for a feature-pack that provides credential stores backed by external vaults</description>
 
     <dependencies>
         <dependency>

@@ -66,7 +66,7 @@ public class HashiCorpVaultHttpsAuthenticationContextIntegrationTestCase {
 
         ModelNode add = Util.createAddOperation(storeAddress);
         add.get("host-address").set(VAULT.composeHttpsHostAddress());
-        add.get("authentication-context").set(NAMES.authenticationContext);
+        add.get("client-ssl-context").set(NAMES.sslContext);
         add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
 
         VaultHttpsElytronSetup.executeSuccess(managementClient, add);

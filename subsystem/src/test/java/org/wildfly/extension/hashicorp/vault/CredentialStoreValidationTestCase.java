@@ -42,7 +42,7 @@ public class CredentialStoreValidationTestCase extends SubsystemTestCase {
 
     @Override
     protected String getSubsystemXml() throws IOException {
-        return readResource("hashicorp-vault-1.0.xml");
+        return readResource("hashicorp-vault-2.0.xml");
     }
 
     @Before

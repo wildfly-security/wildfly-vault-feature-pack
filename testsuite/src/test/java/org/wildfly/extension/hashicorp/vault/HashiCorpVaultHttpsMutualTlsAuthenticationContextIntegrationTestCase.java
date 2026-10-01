@@ -81,7 +81,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
 
         ModelNode add = Util.createAddOperation(storeAddress);
         add.get("host-address").set(VAULT.composeHttpsHostAddress());
-        add.get("authentication-context").set(NAMES.authenticationContext);
+        add.get("client-ssl-context").set(NAMES.sslContext);
         add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
 
         VaultHttpsElytronSetup.executeSuccess(managementClient, add);
@@ -105,7 +105,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
 
         ModelNode add = Util.createAddOperation(storeAddress);
         add.get("host-address").set(VAULT.composeHttpsHostAddress());
-        add.get("authentication-context").set(NAMES.authenticationContext);
+        add.get("client-ssl-context").set(NAMES.sslContext);
         VaultHttpsElytronSetup.executeSuccess(managementClient, add);
 
         String alias = "certtest?password";
@@ -150,7 +150,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
         try {
             ModelNode add = Util.createAddOperation(storeAddress);
             add.get("host-address").set(VAULT.composeHttpsHostAddress());
-            add.get("authentication-context").set(NAMES.authenticationContext);
+            add.get("client-ssl-context").set(NAMES.sslContext);
 
             ModelNode addResponse = managementClient.getControllerClient().execute(add);
             assertEquals(SUCCESS, addResponse.get(OUTCOME).asString(),

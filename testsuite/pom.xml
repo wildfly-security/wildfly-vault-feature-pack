@@ -244,6 +244,13 @@
                         <config-stability-level>default</config-stability-level>
                         <package-stability-level>default</package-stability-level>
                     </galleon-options>
+                    <channels>
+                        <channel>
+                            <manifest>
+                                <url>file://${project.basedir}/wfcore-snapshot-override.yaml</url>
+                            </manifest>
+                        </channel>
+                    </channels>
                 </configuration>
                 <executions>
                     <!-- Provision with layers -->
@@ -430,6 +437,7 @@
                 </plugins>
             </build>
         </profile>
+
 
         <!--
           Debugging profiles.

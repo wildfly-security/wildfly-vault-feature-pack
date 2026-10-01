@@ -1,0 +1,14 @@
+schemaVersion: "1.1.0"
+id: "wfcore-snapshot-override"
+name: "WildFly Core SNAPSHOT Override"
+description: >
+  Temporary workaround: overrides wildfly-elytron-integration with the local
+  34.0.0.Beta7-SNAPSHOT build so that the provisioned server contains
+  DoohickeySimultaneity (introduced in WFCORE-7711).
+  Remove this file and the wfcore-snapshot Maven profile once WildFly Core
+  34.x is released and WildFly is updated to depend on it.
+
+streams:
+  - groupId: "org.wildfly.core"
+    artifactId: "wildfly-elytron-integration"
+    version: "34.0.0.Beta7-SNAPSHOT"

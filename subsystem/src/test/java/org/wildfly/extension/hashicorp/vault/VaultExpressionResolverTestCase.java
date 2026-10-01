@@ -4,6 +4,7 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -17,6 +18,7 @@ import java.util.List;
 
 import org.jboss.as.controller.ExpressionResolver;
 import org.jboss.as.controller.OperationContext;
+import org.jboss.as.controller.OperationFailedException;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceRegistry;
@@ -24,6 +26,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.wildfly.common.function.ExceptionFunction;
+import org.wildfly.security.credential.PasswordCredential;
+import org.wildfly.security.credential.store.CredentialStore;
+import org.wildfly.security.password.interfaces.ClearPassword;
 
 
 /**
@@ -54,13 +60,13 @@ public class VaultExpressionResolverTestCase {
 
     @Test
     public void resolveExpressionReturnsNullForTooShortExpression() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         assertNull(resolver.resolveExpression("${x::y}", ctx));
     }
 
     @Test
     public void resolveExpressionReturnsNullWhenNotWrappedInBraces() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         assertNull(resolver.resolveExpression("HC_VAULT::store:alias", ctx));
         assertNull(resolver.resolveExpression("${HC_VAULT::store:alias", ctx));
         assertNull(resolver.resolveExpression("HC_VAULT::store:alias}", ctx));
@@ -68,14 +74,14 @@ public class VaultExpressionResolverTestCase {
 
     @Test
     public void resolveExpressionReturnsNullForNonVaultPrefix() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         assertNull(resolver.resolveExpression("${OTHER::store:alias}", ctx));
         assertNull(resolver.resolveExpression("${HC_VAULTX::store:alias}", ctx));
     }
 
     @Test
     public void resolveExpressionThrowsWhenAliasEmpty() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         ExpressionResolver.ExpressionResolutionUserException e = assertThrows(
                 ExpressionResolver.ExpressionResolutionUserException.class,
                 () -> resolver.resolveExpression("${HC_VAULT::myStore:}", ctx));
@@ -84,16 +90,21 @@ public class VaultExpressionResolverTestCase {
 
     @Test
     public void resolveExpressionThrowsServerExceptionInModelStage() {
-        OperationContext ctx = mockContext(OperationContext.Stage.MODEL);
+        OperationContext ctx = mockContext(OperationContext.Stage.MODEL, null);
         ExpressionResolver.ExpressionResolutionServerException e = assertThrows(
                 ExpressionResolver.ExpressionResolutionServerException.class,
                 () -> resolver.resolveExpression("${HC_VAULT::myStore:myAlias}", ctx));
         assertTrue(e.getMessage().contains("MODEL"), "Message should mention MODEL");
     }
 
+    /**
+     * Verifies that when no doohickey is registered for the given store name
+     * (simulated by {@code getCapabilityRuntimeAPI} throwing {@link IllegalArgumentException}),
+     * the resolver throws a user-facing exception mentioning the store name.
+     */
     @Test
     public void resolveExpressionThrowsUserExceptionWhenStoreNotInstalled() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         ExpressionResolver.ExpressionResolutionUserException e = assertThrows(
                 ExpressionResolver.ExpressionResolutionUserException.class,
                 () -> resolver.resolveExpression("${HC_VAULT::noSuchStore:someAlias}", ctx));
@@ -101,9 +112,50 @@ public class VaultExpressionResolverTestCase {
                 "Message should mention not installed or not available");
     }
 
+    /**
+     * Verifies that when a doohickey <em>is</em> registered for the store name (simulated by the
+     * mock returning a stub {@code ExceptionFunction} that provides a real in-memory
+     * {@link CredentialStore} containing the expected alias), the resolver returns the secret value.
+     *
+     * <p>This is the core doohickey path: {@code getCapabilityRuntimeAPI} returns the function,
+     * {@code apply(context)} is called, and the resulting store is queried. No MSC service
+     * registry is consulted.</p>
+     */
+    @Test
+    public void resolveExpressionUsesDoohickeyApiToResolveSecret() throws Exception {
+        final String storeName = "myVault";
+        final String alias = "#secret?password";
+        final String expectedValue = "s3cr3t";
+
+        // Build a real in-memory CredentialStore backed by MapCredentialStore.
+        CredentialStore inMemoryStore = buildInMemoryStore(alias, expectedValue);
+
+        // The doohickey is just an ExceptionFunction that returns the store.
+        ExceptionFunction<OperationContext, CredentialStore, OperationFailedException> doohickey =
+                ctx -> inMemoryStore;
+
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, doohickey);
+        String result = resolver.resolveExpression("${HC_VAULT::" + storeName + ":" + alias + "}", ctx);
+        assertEquals(expectedValue, result);
+    }
+
+    /**
+     * Builds a real in-memory {@link CredentialStore} backed by {@code MapCredentialStore},
+     * pre-populated with a single {@link PasswordCredential} at the given alias.
+     */
+    private static CredentialStore buildInMemoryStore(String alias, String secretValue) throws Exception {
+        org.wildfly.security.credential.store.WildFlyElytronCredentialStoreProvider provider =
+                org.wildfly.security.credential.store.WildFlyElytronCredentialStoreProvider.getInstance();
+        CredentialStore store = CredentialStore.getInstance("MapCredentialStore", provider);
+        store.initialize(java.util.Map.of(), null, new java.security.Provider[]{provider});
+        ClearPassword cp = ClearPassword.createRaw(ClearPassword.ALGORITHM_CLEAR, secretValue.toCharArray());
+        store.store(alias, new PasswordCredential(cp));
+        return store;
+    }
+
     @Test
     public void resolveExpressionThrowsOnNullExpression() {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         assertThrows(IllegalArgumentException.class,
                 () -> resolver.resolveExpression(null, ctx));
     }
@@ -163,7 +215,7 @@ public class VaultExpressionResolverTestCase {
             "engine=KVv2@mount%20path#secret%23name?key%3Fname"
     })
     void resolveExpressionExtractsNewFormatAlias(String alias) {
-        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME);
+        OperationContext ctx = mockContext(OperationContext.Stage.RUNTIME, null);
         String expression = "${HC_VAULT::myStore:" + alias + "}";
         ExpressionResolver.ExpressionResolutionUserException e = assertThrows(
                 ExpressionResolver.ExpressionResolutionUserException.class,
@@ -173,7 +225,16 @@ public class VaultExpressionResolverTestCase {
                 "Store name should be correctly extracted from expression with alias '" + alias + "'");
     }
 
-    private static OperationContext mockContext(OperationContext.Stage stage) {
+    /**
+     * Creates a mock {@link OperationContext} for the given stage.
+     *
+     * @param stage     the stage returned by {@link OperationContext#getCurrentStage()}
+     * @param doohickey when non-null, returned by {@code getCapabilityRuntimeAPI}; when null,
+     *                  {@code getCapabilityRuntimeAPI} throws {@link IllegalArgumentException}
+     *                  to simulate a store that is not registered.
+     */
+    private static OperationContext mockContext(OperationContext.Stage stage,
+            ExceptionFunction<OperationContext, CredentialStore, OperationFailedException> doohickey) {
         ServiceRegistry registry = new ServiceRegistry() {
             @Override
             public ServiceController<?> getService(ServiceName name) {
@@ -194,6 +255,12 @@ public class VaultExpressionResolverTestCase {
                 if ("getCurrentStage".equals(method.getName())) {
                     return stage;
                 }
+                if ("getCapabilityRuntimeAPI".equals(method.getName()) && args != null && args.length == 3) {
+                    if (doohickey != null) {
+                        return doohickey;
+                    }
+                    throw new IllegalArgumentException("No capability registered for: " + args[0] + "." + args[1]);
+                }
                 if ("getCapabilityServiceName".equals(method.getName()) && args != null && args.length == 3) {
                     return ServiceName.of("capability", (String) args[0], (String) args[1]);
                 }
@@ -212,4 +279,5 @@ public class VaultExpressionResolverTestCase {
                 new Class<?>[] { OperationContext.class },
                 h);
     }
+
 }

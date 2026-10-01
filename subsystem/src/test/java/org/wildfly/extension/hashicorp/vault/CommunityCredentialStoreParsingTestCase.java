@@ -8,9 +8,12 @@ import static org.wildfly.extension.hashicorp.vault.VaultExtension.SUBSYSTEM_NAM
 
 import java.io.IOException;
 
+import javax.xml.stream.XMLStreamException;
+
 import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.AbstractSubsystemBaseTest;
 import org.jboss.as.version.Stability;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -51,5 +54,19 @@ public class CommunityCredentialStoreParsingTestCase extends AbstractSubsystemBa
     @Test
     public void testSubsystem() throws Exception {
         standardSubsystemTest(null, false);
+    }
+
+    @Test
+    public void testLegacyAuthenticationContextAttributeRejected() throws IOException {
+        String xml = readResource("hashicorp-vault-community-1.0-authentication-context.xml");
+        try {
+            parse(xml);
+            Assert.fail("Expected XMLStreamException for authentication-context attribute in legacy community schema");
+        } catch (XMLStreamException e) {
+            Assert.assertTrue("Exception message should mention authentication-context: " + e.getMessage(),
+                    e.getMessage().contains("authentication-context"));
+            Assert.assertTrue("Exception message should mention client-ssl-context: " + e.getMessage(),
+                    e.getMessage().contains("client-ssl-context"));
+        }
     }
 }

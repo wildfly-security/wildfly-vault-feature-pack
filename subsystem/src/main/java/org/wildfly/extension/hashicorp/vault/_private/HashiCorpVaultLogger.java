@@ -11,6 +11,7 @@ import static org.jboss.logging.Logger.Level.WARN;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.security.GeneralSecurityException;
+import javax.xml.stream.XMLStreamException;
 
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.logging.BasicLogger;
@@ -131,5 +132,9 @@ public interface HashiCorpVaultLogger extends BasicLogger {
 
     @Message(id = 32, value = "Credential for alias '%s' in credential store '%s' is not of a type clear password")
     String credentialNotClearPassword(String alias, String credentialStoreName);
+
+    @Message(id = 33, value = "The 'authentication-context' attribute is no longer supported on the credential-store resource. " +
+            "Use the 'client-ssl-context' attribute to configure TLS for HTTPS connections to HashiCorp Vault.")
+    XMLStreamException authenticationContextAttributeNotSupported();
 
 }

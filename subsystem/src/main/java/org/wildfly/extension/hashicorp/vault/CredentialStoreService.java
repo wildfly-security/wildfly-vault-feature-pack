@@ -5,117 +5,108 @@
 package org.wildfly.extension.hashicorp.vault;
 
 import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
+import org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.VaultCredentialStoreDoohickey;
 
 import org.jboss.msc.service.Service;
 import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
+import org.jboss.msc.value.InjectedValue;
+import org.wildfly.common.function.ExceptionSupplier;
+import org.wildfly.security.credential.PasswordCredential;
+import org.wildfly.security.credential.source.CredentialSource;
 import org.wildfly.security.credential.store.CredentialStore;
-import org.wildfly.security.credential.store.CredentialStoreExtension;
-import org.wildfly.security.hashicorp.vault.HashicorpVaultCredentialStoreExtension;
-import org.wildfly.security.hashicorp.vault.HashicorpVaultCredentialStoreProvider;
+import org.wildfly.security.password.interfaces.ClearPassword;
 
 import javax.net.ssl.SSLContext;
-import java.security.Provider;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
- * Service that manages the lifecycle of a HashiCorp Vault credential store.
- * Uses the legacy MSC Service pattern to support ServiceController.getService() calls
- * for cross-subsystem credential-reference integration.
+ * MSC service that manages the lifecycle of a HashiCorp Vault credential store.
+ *
+ * <p>Works in conjunction with {@link VaultCredentialStoreDoohickey}: if the early-access API
+ * path has already initialized the store before this service starts, {@code start()} reuses that
+ * instance. Otherwise it builds the store from the wired MSC suppliers and publishes the result
+ * through the doohickey so both access paths see the same object. On stop the doohickey is reset
+ * so the next service start rebuilds a fresh instance.</p>
  */
 public class CredentialStoreService implements Service<CredentialStore> {
-    
+
+    private final VaultCredentialStoreDoohickey doohickey;
+
     /**
-     * Initialization parameters for the credential store.
+     * Optional injected SSLContext for HTTPS connections to Vault.
+     * Populated by MSC when a {@code client-ssl-context} attribute is configured.
      */
-    public static class InitializationParams {
-        private final Map<String, String> attributes;
-        private final CredentialStore.CredentialSourceProtectionParameter protectionParameter;
-        private final Provider[] providers;
-        private final SSLContext sslContext;
+    private final InjectedValue<SSLContext> clientSslContextInjector = new InjectedValue<>();
 
-        public InitializationParams(Map<String, String> attributes,
-                                    CredentialStore.CredentialSourceProtectionParameter protectionParameter,
-                                    SSLContext sslContext,
-                                    Provider[] providers) {
-            this.attributes = attributes;
-            this.sslContext = sslContext;
-            this.protectionParameter = protectionParameter;
-            this.providers = providers;
-        }
-        
-        public Map<String, String> getAttributes() {
-            return attributes;
-        }
+    /**
+     * Optional injected credential-source supplier for the Vault token.
+     * Populated by MSC when a {@code credential-reference} attribute is configured.
+     * The add handler wires this via {@code CredentialReference.getCredentialSourceSupplier}.
+     */
+    private volatile ExceptionSupplier<CredentialSource, Exception> credentialSourceSupplier;
 
-        public SSLContext getSSLContext() {
-            return sslContext;
-        }
-        
-        public CredentialStore.CredentialSourceProtectionParameter getProtectionParameter() {
-            return protectionParameter;
-        }
-        
-        public Provider[] getProviders() {
-            return providers;
-        }
-    }
-    
-    private final Supplier<InitializationParams> initParamsSupplier;
-    private final Consumer<CredentialStore> credentialStoreConsumer;
     private volatile CredentialStore credentialStore;
-    
+
     /**
-     * Creates a new credential store service.
-     * 
-     * @param initParamsSupplier supplier that provides the initialization parameters
-     * @param credentialStoreConsumer consumer to handle the created CredentialStore (can be null)
+     * Creates a new service backed by the given doohickey.
+     *
+     * @param doohickey the doohickey that coordinates early-access and service-path initialization
      */
-    public CredentialStoreService(Supplier<InitializationParams> initParamsSupplier, 
-                                   Consumer<CredentialStore> credentialStoreConsumer) {
-        this.initParamsSupplier = initParamsSupplier;
-        this.credentialStoreConsumer = credentialStoreConsumer;
+    public CredentialStoreService(VaultCredentialStoreDoohickey doohickey) {
+        this.doohickey = doohickey;
     }
 
-    public CredentialStoreService(Supplier<InitializationParams> initParamsSupplier) {
-        this(initParamsSupplier, null);
+    /**
+     * Returns the injected value holder for the MSC {@code client-ssl-context} dependency.
+     * The add handler wires this when a {@code client-ssl-context} attribute is configured.
+     */
+    InjectedValue<SSLContext> getClientSslContextInjector() {
+        return clientSslContextInjector;
     }
-    
+
+    /**
+     * Sets the credential-source supplier wired by the add handler for the Vault token.
+     * Called from {@code performRuntime} after the MSC service builder has been configured.
+     */
+    void setCredentialSourceSupplier(ExceptionSupplier<CredentialSource, Exception> supplier) {
+        this.credentialSourceSupplier = supplier;
+    }
+
     @Override
     public void start(StartContext context) throws StartException {
-        try {
-            InitializationParams params = initParamsSupplier.get();
-            Provider provider = HashicorpVaultCredentialStoreProvider.getInstance();
-            credentialStore = CredentialStore.getInstance("HashicorpVaultCredentialStore", provider);
+        credentialStore = doohickey.getForService(() -> {
+            // Service-path builder: called only when the early-access path has not already run.
+            SSLContext sslContext = clientSslContextInjector.getOptionalValue();
 
-            List<Class<? extends CredentialStoreExtension>> supportedTypes = credentialStore.getSupportedExtensionTypes();
-            if (!supportedTypes.contains(HashicorpVaultCredentialStoreExtension.class)) {
-                throw HashiCorpVaultLogger.ROOT_LOGGER.hcVaultCredentialStoreExtensionMissing();
+            String token = null;
+            if (credentialSourceSupplier != null) {
+                try {
+                    CredentialSource cs = credentialSourceSupplier.get();
+                    if (cs != null) {
+                        PasswordCredential pc = cs.getCredential(PasswordCredential.class);
+                        if (pc != null) {
+                            ClearPassword cp = pc.getPassword(ClearPassword.class);
+                            if (cp != null) {
+                                token = new String(cp.getPassword());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStartFailed(e);
+                }
             }
 
-            HashicorpVaultCredentialStoreExtension hashicorpVaultCredentialStoreExtension = credentialStore.getExtensionInstance(HashicorpVaultCredentialStoreExtension.class);
-
-            hashicorpVaultCredentialStoreExtension.setSslContext(params.getSSLContext());
-
-            credentialStore.initialize(
-                params.getAttributes(),
-                params.getProtectionParameter(),
-                params.getProviders()
-            );
-
-
-            if (credentialStoreConsumer != null) {
-                credentialStoreConsumer.accept(credentialStore);
+            try {
+                return VaultCredentialStoreDoohickey.buildCredentialStore(
+                        doohickey.getHostAddress(), doohickey.getNamespace(),
+                        doohickey.isSupportLegacyFormat(), token, sslContext);
+            } catch (Exception e) {
+                throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStartFailed(e);
             }
-        } catch (Exception e) {
-            throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStartFailed(e);
-        }
+        });
     }
-    
+
     @Override
     public void stop(StopContext context) {
         if (credentialStore != null) {
@@ -126,8 +117,9 @@ public class CredentialStoreService implements Service<CredentialStore> {
             }
         }
         credentialStore = null;
+        doohickey.reset();
     }
-    
+
     @Override
     public CredentialStore getValue() throws IllegalStateException {
         if (credentialStore == null) {
@@ -136,4 +128,3 @@ public class CredentialStoreService implements Service<CredentialStore> {
         return credentialStore;
     }
 }
-

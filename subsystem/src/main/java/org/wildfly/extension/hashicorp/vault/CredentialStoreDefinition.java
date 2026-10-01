@@ -13,6 +13,7 @@ import org.jboss.as.controller.ObjectTypeAttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
@@ -35,8 +36,10 @@ import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.ServiceRegistry;
-import org.jboss.msc.value.InjectedValue;
+import org.jboss.msc.service.StartException;
+import org.wildfly.common.function.ExceptionFunction;
 import org.wildfly.common.function.ExceptionSupplier;
+import org.wildfly.extension.elytron.DoohickeySimultaneity;
 import org.wildfly.security.auth.server.IdentityCredentials;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.credential.source.CredentialSource;
@@ -45,16 +48,13 @@ import org.wildfly.security.credential.store.CredentialStoreException;
 import org.wildfly.security.credential.store.CredentialStoreExtension;
 import org.wildfly.security.credential.store.UnsupportedCredentialTypeException;
 import org.wildfly.security.hashicorp.vault.HashicorpVaultCredentialStoreExtension;
+import org.wildfly.security.hashicorp.vault.HashicorpVaultCredentialStoreProvider;
 import org.wildfly.security.password.PasswordFactory;
 import org.wildfly.security.password.WildFlyElytronPasswordProvider;
 import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.spec.ClearPasswordSpec;
 
 import java.io.IOException;
-import java.net.URI;
-import java.security.AccessController;
-import java.security.GeneralSecurityException;
-import java.security.PrivilegedAction;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.spec.InvalidKeySpecException;
@@ -67,9 +67,6 @@ import java.util.Set;
 
 import javax.net.ssl.SSLContext;
 
-import org.wildfly.security.auth.client.AuthenticationContext;
-import org.wildfly.security.auth.client.AuthenticationContextConfigurationClient;
-
 import static org.jboss.as.controller.security.CredentialReference.CREDENTIAL_STORE_CAPABILITY;
 
 /**
@@ -80,10 +77,17 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
 
     static final String HOST_ADDRESS = "host-address";
     static final String NAMESPACE = "namespace";
-    static final String AUTHENTICATION_CONTEXT = "authentication-context";
+    static final String CLIENT_SSL_CONTEXT = "client-ssl-context";
 
-    /** Elytron capability name for authentication-context (used for TLS / client certs). */
-    private static final String AUTHENTICATION_CONTEXT_CAPABILITY = "org.wildfly.security.authentication-context";
+    /** Elytron capability name for client-ssl-context (used for outbound TLS). */
+    private static final String CLIENT_SSL_CONTEXT_CAPABILITY = "org.wildfly.security.client-ssl-context";
+
+    /**
+     * Early-access runtime API capability name for the client-ssl-context resource
+     * (provided by WildFly Core's elytron subsystem). Used to obtain the SSLContext
+     * before the client-ssl-context service has started.
+     */
+    private static final String CLIENT_SSL_CONTEXT_API_CAPABILITY = "org.wildfly.security.client-ssl-context-api";
 
     protected static final SimpleAttributeDefinition HOST_NAME_DEF =
             new SimpleAttributeDefinitionBuilder(HOST_ADDRESS, ModelType.STRING)
@@ -103,14 +107,24 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .setStability(Stability.DEFAULT)
                     .build();
 
-    protected static final SimpleAttributeDefinition AUTHENTICATION_CONTEXT_DEF =
-            new SimpleAttributeDefinitionBuilder(AUTHENTICATION_CONTEXT, ModelType.STRING)
+    /**
+     * Dummy attribute definition used only by the legacy schema parsers to recognise and reject
+     * the old 'authentication-context' XML attribute with a helpful error message.
+     * This attribute is NOT registered in the management model.
+     */
+    static final SimpleAttributeDefinition AUTHENTICATION_CONTEXT_LEGACY_DEF =
+            new SimpleAttributeDefinitionBuilder("authentication-context", ModelType.STRING)
                     .setRequired(false)
-                    .setAllowExpression(true)
-                    .setXmlName(AUTHENTICATION_CONTEXT)
+                    .build();
+
+    protected static final SimpleAttributeDefinition CLIENT_SSL_CONTEXT_DEF =
+            new SimpleAttributeDefinitionBuilder(CLIENT_SSL_CONTEXT, ModelType.STRING)
+                    .setRequired(false)
+                    .setAllowExpression(false)
+                    .setXmlName(CLIENT_SSL_CONTEXT)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
                     .setStability(Stability.DEFAULT)
-                    .setCapabilityReference(AUTHENTICATION_CONTEXT_CAPABILITY, CREDENTIAL_STORE_CAPABILITY)
+                    .setCapabilityReference(CLIENT_SSL_CONTEXT_CAPABILITY, CREDENTIAL_STORE_CAPABILITY)
                     .build();
 
     static final RuntimeCapability<Void> CREDENTIAL_STORE_RUNTIME_CAPABILITY =  RuntimeCapability
@@ -129,6 +143,21 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             RuntimeCapability.Builder.of(HASHICORP_VAULT_CREDENTIAL_STORE_CAPABILITY, true, CredentialStore.class)
             .build();
 
+    /**
+     * Early-access runtime API capability name for the Vault credential store. Registering under this
+     * name (alongside the service capability) allows {@link VaultExpressionResolver} and
+     * {@link CredentialReference#getCredentialSource} to initialize the store on demand during
+     * {@code Stage.RUNTIME} before its MSC service has started.
+     *
+     * <p>The value type is
+     * {@code ExceptionFunction<OperationContext, CredentialStore, OperationFailedException>} —
+     * the same contract as Elytron's {@code credential-store-api} capability, so
+     * {@link CredentialReference#getCredentialSource} can retrieve a Vault token from a Vault
+     * credential-reference without any special-casing.</p>
+     */
+    static final String VAULT_CREDENTIAL_STORE_API_CAPABILITY =
+            "org.wildfly.security.credential-store-api";
+
     static final ObjectTypeAttributeDefinition CREDENTIAL_REFERENCE =
             CredentialReference.getAttributeBuilder("credential-reference", "credential-reference", true)
                     .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
@@ -138,7 +167,7 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
                     .build();
 
     public static final Collection<AttributeDefinition> ATTRIBUTES = List.of(HOST_NAME_DEF, NAMESPACE_DEF,
-            AUTHENTICATION_CONTEXT_DEF, CREDENTIAL_REFERENCE);
+            CLIENT_SSL_CONTEXT_DEF, CREDENTIAL_REFERENCE);
 
     static final StandardResourceDescriptionResolver OPERATION_RESOLVER =
             new StandardResourceDescriptionResolver("credential-store.operations",
@@ -224,12 +253,31 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
         resourceRegistration.registerOperationHandler(REMOVE_ALIAS, new RuntimeOperationHandler(this::removeAliasOperation));
     }
 
-    private static AbstractAddStepHandler ADD_HANDLER = new AbstractAddStepHandler(){
+    private static AbstractAddStepHandler ADD_HANDLER = new AbstractAddStepHandler() {
 
         @Override
         protected void populateModel(ModelNode operation, ModelNode model) throws OperationFailedException {
             for (AttributeDefinition attr : ATTRIBUTES) {
                 attr.validateAndSet(operation, model);
+            }
+        }
+
+        @Override
+        protected void recordCapabilitiesAndRequirements(OperationContext context, ModelNode operation, Resource resource)
+                throws OperationFailedException {
+            super.recordCapabilitiesAndRequirements(context, operation, resource);
+
+            if (requiresRuntime(context)) {
+                // Register the doohickey as a runtime API capability so that Stage.RUNTIME expression
+                // resolution and CredentialReference.getCredentialSource() can initialize the store
+                // on demand before its MSC service starts.
+                VaultCredentialStoreDoohickey doohickey =
+                        new VaultCredentialStoreDoohickey(context.getCurrentAddress());
+                context.registerCapability(RuntimeCapability.Builder
+                        .<ExceptionFunction<OperationContext, CredentialStore, OperationFailedException>>
+                                of(VAULT_CREDENTIAL_STORE_API_CAPABILITY, true, doohickey)
+                        .build()
+                        .fromBaseCapability(context.getCurrentAddressValue()));
             }
         }
 
@@ -246,128 +294,70 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
         protected void performRuntime(OperationContext context, ModelNode operation, ModelNode model) throws OperationFailedException {
             final String name = context.getCurrentAddressValue();
 
-            final ModelNode hostnameNode = HOST_NAME_DEF.resolveModelAttribute(context, model);
-            final ModelNode namespaceNode = NAMESPACE_DEF.resolveModelAttribute(context, model);
-            final ModelNode authenticationContextNode = AUTHENTICATION_CONTEXT_DEF.resolveModelAttribute(context, model);
+            // Retrieve the doohickey that was registered in recordCapabilitiesAndRequirements.
+            @SuppressWarnings("unchecked")
+            ExceptionFunction<OperationContext, CredentialStore, OperationFailedException> runtimeApi =
+                    context.getCapabilityRuntimeAPI(VAULT_CREDENTIAL_STORE_API_CAPABILITY, name, ExceptionFunction.class);
+            VaultCredentialStoreDoohickey doohickey = (VaultCredentialStoreDoohickey) runtimeApi;
 
-            Map<String, String> attributes = new HashMap<>();
-            if (hostnameNode.isDefined()) {
-                attributes.put("host-address", hostnameNode.asString());
-            }
-            if (namespaceNode.isDefined()) {
-                attributes.put("namespace", namespaceNode.asString());
-            }
+            // Resolve and cache model attributes into the doohickey for both access paths.
+            doohickey.resolveRuntime(context);
 
-            // Enable legacy alias format support based on runtime stability level
-            // At COMMUNITY stability or lower: legacy support is enabled (with deprecation warnings)
-            // At DEFAULT stability or higher: legacy support is disabled (new format required)
-            Stability stability = context.getStability();
-            boolean supportLegacyFormat = stability.enables(Stability.COMMUNITY);
-            attributes.put("support-legacy-alias-format", String.valueOf(supportLegacyFormat));
+            final ServiceName serviceName = CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
 
-            HashiCorpVaultLogger.ROOT_LOGGER.debugf(
-                "Initializing credential store '%s' with stability=%s, supportLegacyAliasFormat=%s",
-                name, stability, supportLegacyFormat);
+            CredentialStoreService service = new CredentialStoreService(doohickey);
 
-            SSLContext sslContext = null;
+            ServiceBuilder<CredentialStore> serviceBuilder =
+                    context.getServiceTarget().addService(serviceName, service);
 
-            ServiceName authenticationContextServiceName = null;
-            if (authenticationContextNode.isDefined()) {
-                String authenticationContextName = authenticationContextNode.asString();
-                String acCapability = RuntimeCapability.buildDynamicCapabilityName(AUTHENTICATION_CONTEXT_CAPABILITY, authenticationContextName);
-                authenticationContextServiceName = context.getCapabilityServiceName(acCapability, AuthenticationContext.class);
-                ServiceController<AuthenticationContext> authenticationContextServiceController = (ServiceController<AuthenticationContext>) context.getServiceRegistry(false).getService(authenticationContextServiceName);
-                if (authenticationContextServiceController == null) {
-                    throw HashiCorpVaultLogger.ROOT_LOGGER.authenticationContextNotFound(authenticationContextName);
-                }
-                AuthenticationContext authenticationContext = authenticationContextServiceController.getValue();
-                if (authenticationContext == null) {
-                    throw HashiCorpVaultLogger.ROOT_LOGGER.authenticationContextNotAvailable(authenticationContextName);
-                }
-                try {
-                    URI vaultUri = URI.create(hostnameNode.asString());
-                    AuthenticationContextConfigurationClient authenticationContextConfigurationClient = AccessController.doPrivileged((PrivilegedAction<AuthenticationContextConfigurationClient>) AuthenticationContextConfigurationClient.ACTION);
-                    sslContext = authenticationContextConfigurationClient.getSSLContext(vaultUri, authenticationContext);
-                } catch (GeneralSecurityException e) {
-                    throw HashiCorpVaultLogger.ROOT_LOGGER.sslContextFromAuthenticationContextFailed(authenticationContextName, e);
-                }
+            // Also register the service under the subsystem-private capability so that
+            // VaultExpressionResolver can resolve ${HC_VAULT::...} expressions without
+            // accidentally targeting a non-Vault credential store.
+            ServiceName privateServiceName = HASHICORP_VAULT_CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
+            serviceBuilder.addAliases(privateServiceName);
+
+            // Wire the real MSC service dependency for the credential-reference so that
+            // service restart properly re-evaluates the credential source. Also capture the
+            // supplier so the service-path builder can resolve the token without a context.
+            ExceptionSupplier<CredentialSource, Exception> credentialSourceSupplier =
+                    CredentialReference.getCredentialSourceSupplier(context, CREDENTIAL_REFERENCE, model, serviceBuilder);
+            if (credentialSourceSupplier != null) {
+                service.setCredentialSourceSupplier(credentialSourceSupplier);
             }
 
-            try {
-                    ServiceName serviceName = CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
-
-                    ExceptionSupplier<CredentialSource, Exception> credentialSourceSupplier =
-                            CredentialReference.getCredentialSourceSupplier(context, CREDENTIAL_REFERENCE, model, context.getServiceTarget().addService(ServiceName.of("temp", name)));
-
-                    String token = null;
-                    if (credentialSourceSupplier != null) {
-                        try {
-                            CredentialSource credentialSource = credentialSourceSupplier.get();
-                            if (credentialSource != null) {
-                                PasswordCredential passwordCredential = credentialSource.getCredential(PasswordCredential.class);
-                                if (passwordCredential != null) {
-                                    ClearPassword clearPassword = passwordCredential.getPassword(ClearPassword.class);
-                                    if (clearPassword != null) {
-                                        token = new String(clearPassword.getPassword());
-                                    }
-                                }
-                            }
-                        } catch (IOException e) {
-                            throw HashiCorpVaultLogger.ROOT_LOGGER.failedToObtainCredentialFromReference(e);
-                        }
-                    }
-
-                    CredentialStore.CredentialSourceProtectionParameter protectionParameter;
-                    if (token != null) {
-                        protectionParameter = new CredentialStore.CredentialSourceProtectionParameter(
-                            IdentityCredentials.NONE.withCredential(createCredentialFromPassword(token))
-                        );
-                    } else {
-                        protectionParameter = new CredentialStore.CredentialSourceProtectionParameter(
-                            IdentityCredentials.NONE
-                        );
-                    }
-
-                    final Map<String, String> finalAttributes = attributes;
-                    final CredentialStore.CredentialSourceProtectionParameter finalProtectionParameter = protectionParameter;
-                    final Provider[] finalProviders = new Provider[]{WildFlyElytronPasswordProvider.getInstance()};
-
-                    // Use the legacy addService pattern which supports ServiceController.getService()
-                    // This is required for Elytron's credential-reference to work cross-subsystem
-                SSLContext finalSslContext = sslContext;
-                CredentialStoreService service = new CredentialStoreService(() ->
-                        new CredentialStoreService.InitializationParams(finalAttributes, finalProtectionParameter, finalSslContext, finalProviders)
-                    );
-
-                    final InjectedValue<AuthenticationContext> authenticationContextInjector = new InjectedValue<>();
-
-                    // Use the legacy addService with the real service name
-                    ServiceBuilder<CredentialStore> serviceBuilder =
-                            context.getServiceTarget().addService(serviceName, service);
-
-                    // Also register the service under the subsystem-private capability so that
-                    // VaultExpressionResolver can resolve ${HC_VAULT::...} expressions without
-                    // being able to accidentally target a non-Vault credential store.
-                    // MSC aliases share the same lifecycle as the primary service name: removing
-                    // the primary automatically deregisters all aliases.
-                    ServiceName privateServiceName = HASHICORP_VAULT_CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
-                    serviceBuilder.addAliases(privateServiceName);
-
-                    if (authenticationContextServiceName != null) {
-                        serviceBuilder.addDependency(authenticationContextServiceName, AuthenticationContext.class, authenticationContextInjector);
-                    }
-                    // Re-register the credential-reference dependencies on the real service builder
-                    if (credentialSourceSupplier != null) {
-                        CredentialReference.getCredentialSourceSupplier(context, CREDENTIAL_REFERENCE, model, serviceBuilder);
-                    }
-
-                    serviceBuilder.install();
-
-            } catch (CredentialStoreException e) {
-                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeHashiCorpVaultCredentialStore(e.getMessage(), e);
-            } catch (Exception e) {
-                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeCredentialStoreService(e.getMessage(), e);
+            // Wire the client-ssl-context service dependency if configured.
+            if (CLIENT_SSL_CONTEXT_DEF.resolveModelAttribute(context, model).isDefined()) {
+                String clientSslContextName = CLIENT_SSL_CONTEXT_DEF.resolveModelAttribute(context, model).asString();
+                String sslCapability = RuntimeCapability.buildDynamicCapabilityName(CLIENT_SSL_CONTEXT_CAPABILITY, clientSslContextName);
+                serviceBuilder.addDependency(
+                        context.getCapabilityServiceName(sslCapability, SSLContext.class),
+                        SSLContext.class,
+                        service.getClientSslContextInjector());
             }
+
+            serviceBuilder.install();
+        }
+    };
+
+    private static AbstractRemoveStepHandler REMOVE_HANDLER = new AbstractRemoveStepHandler() {
+
+        @Override
+        protected void recordCapabilitiesAndRequirements(OperationContext context, ModelNode operation, Resource resource)
+                throws OperationFailedException {
+            super.recordCapabilitiesAndRequirements(context, operation, resource);
+            if (requiresRuntime(context)) {
+                // Deregister the API capability to prevent WFLYCTL0436 if the same resource name is added again.
+                context.deregisterCapability(
+                        RuntimeCapability.buildDynamicCapabilityName(
+                                VAULT_CREDENTIAL_STORE_API_CAPABILITY, context.getCurrentAddressValue()));
+            }
+        }
+
+        @Override
+        protected void performRuntime(OperationContext context, ModelNode operation, ModelNode model) throws OperationFailedException {
+            final String name = context.getCurrentAddressValue();
+            ServiceName serviceName = CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
+            context.removeService(serviceName);
         }
     };
 
@@ -380,14 +370,221 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
         }
     }
 
-    private static AbstractRemoveStepHandler REMOVE_HANDLER = new AbstractRemoveStepHandler() {
-        @Override
-        protected void performRuntime(OperationContext context, ModelNode operation, ModelNode model) throws OperationFailedException {
-            final String name = context.getCurrentAddressValue();
-            ServiceName serviceName = CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
-            context.removeService(serviceName);
+    // -------------------------------------------------------------------------
+    // VaultCredentialStoreDoohickey
+    // -------------------------------------------------------------------------
+
+    /**
+     * Coordinates initialization of a HashiCorp Vault credential store across two access paths:
+     *
+     * <ol>
+     *   <li><b>Early (API) path:</b> {@link #apply(OperationContext)} is called during
+     *       {@code Stage.RUNTIME} expression resolution before the MSC service has started.
+     *       It calls {@link #createImmediately} which builds and caches the store.</li>
+     *   <li><b>Service path:</b> {@link CredentialStoreService#start} calls {@link #getForService}
+     *       which reuses the cached instance if already built, or builds it now.</li>
+     * </ol>
+     *
+     * <p>Exactly one initialization happens per resource lifecycle. The same {@link CredentialStore}
+     * instance is returned by both access paths. All initialization is protected by the shared
+     * {@link DoohickeySimultaneity} lock to prevent concurrent construction and detect cycles.</p>
+     */
+    static final class VaultCredentialStoreDoohickey
+            implements ExceptionFunction<OperationContext, CredentialStore, OperationFailedException> {
+
+        private final PathAddress resourceAddress;
+
+        // Model-resolved attributes — populated by resolveRuntime() in Stage.MODEL→RUNTIME transition.
+        private volatile String hostAddress;
+        private volatile String namespace;
+        private volatile String clientSslContextName;
+        private volatile boolean supportLegacyFormat;
+        /** The full resource model node, retained so that {@link #createImmediately} can call
+         *  {@link CredentialReference#getCredentialSource(OperationContext, ObjectTypeAttributeDefinition, ModelNode)}
+         *  with the correct parent model. */
+        private volatile ModelNode resourceModel;
+        private volatile boolean modelResolved = false;
+
+        // The single canonical CredentialStore instance shared between both access paths.
+        private volatile CredentialStore value;
+
+        VaultCredentialStoreDoohickey(PathAddress resourceAddress) {
+            this.resourceAddress = resourceAddress;
         }
-    };
+
+        /**
+         * Resolves and caches model attributes from the current operation context.
+         * Called once from {@code performRuntime} in the add handler.
+         */
+        void resolveRuntime(OperationContext context) throws OperationFailedException {
+            if (!modelResolved) {
+                ModelNode model = context.readResourceFromRoot(resourceAddress).getModel();
+                hostAddress = HOST_NAME_DEF.resolveModelAttribute(context, model).asString();
+                namespace = NAMESPACE_DEF.resolveModelAttribute(context, model).asStringOrNull();
+                clientSslContextName = CLIENT_SSL_CONTEXT_DEF.resolveModelAttribute(context, model).asStringOrNull();
+                Stability stability = context.getStability();
+                supportLegacyFormat = stability.enables(Stability.COMMUNITY);
+                resourceModel = model;
+                modelResolved = true;
+            }
+        }
+
+        /**
+         * Early-access path: invoked during {@code Stage.RUNTIME} before the MSC service starts.
+         * Returns the cached store if already initialized; otherwise builds it under the
+         * {@link DoohickeySimultaneity} lock.
+         */
+        @Override
+        public CredentialStore apply(OperationContext foreignContext) throws OperationFailedException {
+            CredentialStore current = value;
+            if (current != null) {
+                return current;
+            }
+            return DoohickeySimultaneity.withLock(resourceAddress, () -> {
+                if (value == null) {
+                    // Ensure model attributes are resolved even if called from a foreign context.
+                    if (!modelResolved) {
+                        resolveRuntime(foreignContext);
+                    }
+                    value = createImmediately(foreignContext);
+                }
+                return value;
+            });
+        }
+
+        /**
+         * Service path: invoked from {@link CredentialStoreService#start}. Reuses the cached
+         * instance if the early path already ran; otherwise builds the store under the lock.
+         */
+        CredentialStore getForService(ExceptionSupplier<CredentialStore, StartException> builder) throws StartException {
+            CredentialStore current = value;
+            if (current != null) {
+                return current;
+            }
+            try {
+                return DoohickeySimultaneity.withLockForService(resourceAddress, () -> {
+                    if (value == null) {
+                        value = builder.get();
+                    }
+                    return value;
+                });
+            } catch (OperationFailedException e) {
+                throw new StartException(e);
+            }
+        }
+
+        /**
+         * Returns the currently cached store, or {@code null} if not yet initialized.
+         */
+        CredentialStore cachedValue() {
+            return value;
+        }
+
+        // ---- Accessors for the service-path builder in CredentialStoreService ----
+
+        String getHostAddress() { return hostAddress; }
+        String getNamespace()   { return namespace; }
+        boolean isSupportLegacyFormat() { return supportLegacyFormat; }
+
+        /**
+         * Clears the cached store under the lock so that the next service start rebuilds it.
+         * Called from {@link CredentialStoreService#stop}.
+         */
+        void reset() {
+            DoohickeySimultaneity.withLockForReset(() -> value = null);
+        }
+
+        /**
+         * Builds the credential store immediately using early-access paths for its dependencies
+         * (SSL context via the {@code client-ssl-context-api} capability; credential source via
+         * {@link CredentialReference#getCredentialSource}).
+         */
+        private CredentialStore createImmediately(OperationContext context) throws OperationFailedException {
+            SSLContext sslContext = null;
+            if (clientSslContextName != null) {
+                @SuppressWarnings("unchecked")
+                ExceptionFunction<OperationContext, SSLContext, OperationFailedException> sslApi =
+                        context.getCapabilityRuntimeAPI(CLIENT_SSL_CONTEXT_API_CAPABILITY,
+                                clientSslContextName, ExceptionFunction.class);
+                sslContext = sslApi.apply(context);
+            }
+
+            String token = null;
+            if (resourceModel != null && CREDENTIAL_REFERENCE.resolveModelAttribute(context, resourceModel).isDefined()) {
+                try {
+                    CredentialSource credentialSource = CredentialReference.getCredentialSource(context, CREDENTIAL_REFERENCE, resourceModel);
+                    if (credentialSource != null) {
+                        PasswordCredential passwordCredential = credentialSource.getCredential(PasswordCredential.class);
+                        if (passwordCredential != null) {
+                            ClearPassword clearPassword = passwordCredential.getPassword(ClearPassword.class);
+                            if (clearPassword != null) {
+                                token = new String(clearPassword.getPassword());
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.failedToObtainCredentialFromReference(e);
+                }
+            }
+
+            return buildCredentialStore(hostAddress, namespace, supportLegacyFormat, token, sslContext);
+        }
+
+        /**
+         * Shared store construction logic used by both the early path ({@link #createImmediately})
+         * and the service path ({@link CredentialStoreService#start}).
+         */
+        static CredentialStore buildCredentialStore(String hostAddress, String namespace,
+                boolean supportLegacyFormat, String token, SSLContext sslContext)
+                throws OperationFailedException {
+            Map<String, String> attributes = new HashMap<>();
+            attributes.put("host-address", hostAddress);
+            if (namespace != null) {
+                attributes.put("namespace", namespace);
+            }
+            attributes.put("support-legacy-alias-format", String.valueOf(supportLegacyFormat));
+
+            CredentialStore.CredentialSourceProtectionParameter protectionParameter;
+            if (token != null) {
+                try {
+                    protectionParameter = new CredentialStore.CredentialSourceProtectionParameter(
+                            IdentityCredentials.NONE.withCredential(createCredentialFromPassword(token)));
+                } catch (UnsupportedCredentialTypeException e) {
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeHashiCorpVaultCredentialStore(e.getMessage(), e);
+                }
+            } else {
+                protectionParameter = new CredentialStore.CredentialSourceProtectionParameter(
+                        IdentityCredentials.NONE);
+            }
+
+            Provider[] providers = new Provider[] { WildFlyElytronPasswordProvider.getInstance() };
+
+            try {
+                Provider vaultProvider = HashicorpVaultCredentialStoreProvider.getInstance();
+                CredentialStore store = CredentialStore.getInstance("HashicorpVaultCredentialStore", vaultProvider);
+
+                List<Class<? extends CredentialStoreExtension>> supportedTypes = store.getSupportedExtensionTypes();
+                if (!supportedTypes.contains(HashicorpVaultCredentialStoreExtension.class)) {
+                    throw HashiCorpVaultLogger.ROOT_LOGGER.hcVaultCredentialStoreExtensionMissing();
+                }
+
+                HashicorpVaultCredentialStoreExtension extension =
+                        store.getExtensionInstance(HashicorpVaultCredentialStoreExtension.class);
+                extension.setSslContext(sslContext);
+
+                store.initialize(attributes, protectionParameter, providers);
+                return store;
+            } catch (CredentialStoreException e) {
+                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeHashiCorpVaultCredentialStore(e.getMessage(), e);
+            } catch (Exception e) {
+                throw HashiCorpVaultLogger.ROOT_LOGGER.failedToInitializeCredentialStoreService(e.getMessage(), e);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Runtime operations
+    // -------------------------------------------------------------------------
 
     private void readAliasesOperation(OperationContext context, ModelNode operation, CredentialStore credentialStore) throws OperationFailedException {
         try {

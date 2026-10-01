@@ -1,0 +1,12 @@
+<!--
+  ~ Copyright The WildFly Authors
+  ~ SPDX-License-Identifier: Apache-2.0
+  -->
+
+<subsystem xmlns="urn:wildfly:hashicorp-vault:1.0">
+    <credential-store name="test-store"
+                      host-address="https://vault.example.com:8200"
+                      authentication-context="my-context">
+        <credential-reference clear-text="token"/>
+    </credential-store>
+</subsystem>

@@ -29,12 +29,12 @@ public class SubsystemTestCase extends AbstractSubsystemBaseTest {
 
     @Override
     protected String getSubsystemXml() throws IOException {
-        return readResource("hashicorp-vault-1.0.xml");
+        return readResource("hashicorp-vault-2.0.xml");
     }
 
     @Override
     protected String getSubsystemXsdPath() throws Exception {
-        return "schema/hashicorp-vault_1_0.xsd";
+        return "schema/hashicorp-vault_2_0.xsd";
     }
 
 }

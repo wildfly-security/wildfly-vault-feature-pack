@@ -93,7 +93,7 @@ public class CredentialStoreVaultIntegrationTestCase extends SubsystemJUnit5Test
     protected String getSubsystemXml() throws IOException {
         ensureVaultStarted();
         String hostAddress = vault.getHttpHostAddress();
-        return "<subsystem xmlns=\"urn:wildfly:hashicorp-vault:1.0\">\n"
+        return "<subsystem xmlns=\"urn:wildfly:hashicorp-vault:2.0\">\n"
                 + "    <credential-store name=\"" + CREDENTIAL_STORE_NAME + "\" host-address=\"" + hostAddress + "\">\n"
                 + "        <credential-reference clear-text=\"" + VAULT_TOKEN + "\"/>\n"
                 + "    </credential-store>\n"

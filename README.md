@@ -114,7 +114,7 @@ Start WildFly with default stability:
 Minimal HTTP Vault URL:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:2.0">
     <credential-store name="my-vault"
                       host-address="http://localhost:8200">
         <credential-reference clear-text="myroot"/>
@@ -122,23 +122,23 @@ Minimal HTTP Vault URL:
 </subsystem>
 ```
 
-For **HTTPS**, TLS trust and optional client authentication are configured in **Elytron**, not on the credential store. Use **`authentication-context`** with an Elytron client context name:
+For **HTTPS**, TLS trust and optional client authentication are configured in **Elytron** via a `client-ssl-context`. Reference it with the **`client-ssl-context`** attribute:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:2.0">
     <credential-store name="secure-vault"
                       host-address="https://vault.example.com:8200"
-                      authentication-context="vault-tls-context">
+                      client-ssl-context="vault-tls-context">
         <credential-reference clear-text="vault-token"/>
     </credential-store>
 </subsystem>
 ```
 
-Optional **`namespace`** (Vault Enterprise) is supported as an attribute on `credential-store`. Define **`vault-tls-context`** (and related Elytron `ssl-context`, `trust-store`, etc.) before referencing it.
+Optional **`namespace`** (Vault Enterprise) is supported as an attribute on `credential-store`. Define **`vault-tls-context`** under Elytron (`client-ssl-context`, `trust-manager`, `key-store`, etc.) before referencing it.
 
 ### CLI commands
 
-Create Elytron TLS client resources **before** adding a credential store that uses `authentication-context`.
+Create Elytron `client-ssl-context` resources **before** adding a credential store that uses `client-ssl-context`.
 
 ```bash
 /subsystem=hashicorp-vault/credential-store=my-vault:add(
@@ -148,12 +148,12 @@ Create Elytron TLS client resources **before** adding a credential store that us
 
 /subsystem=hashicorp-vault/credential-store=secure-vault:add(
     host-address="https://vault.example.com:8200",
-    authentication-context=vault-tls-context,
+    client-ssl-context=vault-tls-context,
     credential-reference={clear-text="vault-token"}
 )
 
 /subsystem=hashicorp-vault/credential-store=my-vault:add-alias(
-    alias="secret/myapp.database_password",
+    alias="myapp/database?password",
     secret-value="supersecret"
 )
 
@@ -163,10 +163,10 @@ Create Elytron TLS client resources **before** adding a credential store that us
 
 ### Using Vault credentials (`credential-reference`)
 
-Use the credential store **`name`** and an alias in the form **`<vault-path>.<key>`** (KV path and field name):
+Use the credential store **`name`** and an alias formatted as `secret-path?key` (or `@mount#secret-path?key`):
 
 ```xml
-<credential-reference store="my-vault" alias="secret/database.password"/>
+<credential-reference store="my-vault" alias="database?password"/>
 ```
 
 ### HC_VAULT expressions
@@ -178,7 +178,7 @@ ${HC_VAULT::credential-store-name:alias}
 ```
 
 - **`credential-store-name`** — the `name` of the `credential-store` resource
-- **`alias`** — the same string as in `credential-reference` (for example `secret/database.password`)
+- **`alias`** — the same string as in `credential-reference` (for example `database?password` or `myapp/database?password`)
 
 Resolution requires the credential store service to be available and is **not supported in the MODEL stage**; use only on attributes that resolve expressions at a later stage.
 
@@ -186,7 +186,7 @@ Example:
 
 ```xml
 <system-properties>
-    <property name="example.secret" value="${HC_VAULT::my-vault:secret/database.password}"/>
+    <property name="example.secret" value="${HC_VAULT::my-vault:database?password}"/>
 </system-properties>
 ```
 

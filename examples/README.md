@@ -20,7 +20,7 @@ vault kv put secret/database username=dbuser password=secretpass
 Add the Vault subsystem to your `standalone.xml`:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:2.0">
     <credential-store name="my-vault"
                       host-address="http://localhost:8200">
         <credential-reference clear-text="myroot"/>
@@ -28,19 +28,19 @@ Add the Vault subsystem to your `standalone.xml`:
 </subsystem>
 ```
 
-For **HTTPS** Vault URLs, TLS trust (and optional client authentication) is **not** configured on the credential store itself. Point `host-address` at `https://…` and set **`authentication-context`** to the name of an Elytron **authentication-context** that defines how the management/client SSL connection to Vault is secured (trust store, client certificate, etc.):
+For **HTTPS** Vault URLs, TLS trust (and optional client authentication) is configured in Elytron via a `client-ssl-context`. Point `host-address` at `https://…` and set **`client-ssl-context`** to the name of the Elytron `client-ssl-context`:
 
 ```xml
-<subsystem xmlns="urn:wildfly:hashicorp-vault:1.0">
+<subsystem xmlns="urn:wildfly:hashicorp-vault:2.0">
     <credential-store name="secure-vault"
                       host-address="https://vault.example.com:8200"
-                      authentication-context="vault-tls-context">
+                      client-ssl-context="vault-tls-context">
         <credential-reference clear-text="vault-token"/>
     </credential-store>
 </subsystem>
 ```
 
-Define `vault-tls-context` under the Elytron subsystem (for example with a `trust-store` and `ssl-context` referenced from that authentication context). The exact Elytron resources depend on your PKI layout; see WildFly documentation for **authentication-context** and **client-ssl-context**.
+Define `vault-tls-context` under the Elytron subsystem (`client-ssl-context`, `trust-manager`, `key-store`, etc.) before referencing it.
 
 Optional **`namespace`** sets the Vault Enterprise namespace:
 
@@ -48,14 +48,14 @@ Optional **`namespace`** sets the Vault Enterprise namespace:
 <credential-store name="namespaced-vault"
                   host-address="https://vault.example.com:8200"
                   namespace="production"
-                  authentication-context="vault-tls-context">
+                  client-ssl-context="vault-tls-context">
     <credential-reference clear-text="vault-token"/>
 </credential-store>
 ```
 
 ### 4. Use Vault Credentials
 
-Reference Vault credentials in other subsystems using the credential store name and alias format `<vault-path>.<key>`:
+Reference Vault credentials in other subsystems using the credential store name and alias format `secret-path?key` (or `@mount#secret-path?key`):
 
 ```xml
 <subsystem xmlns="urn:jboss:domain:datasources:7.0">
@@ -64,7 +64,7 @@ Reference Vault credentials in other subsystems using the credential store name 
             <connection-url>jdbc:postgresql://localhost:5432/mydb</connection-url>
             <driver>postgresql</driver>
             <security>
-                <credential-reference store="my-vault" alias="secret/database.password"/>
+                <credential-reference store="my-vault" alias="database?password"/>
             </security>
         </datasource>
     </datasources>
@@ -82,13 +82,13 @@ ${HC_VAULT::credential-store-name:alias}
 ```
 
 - **`credential-store-name`** — the `name` of a `credential-store` under `subsystem=hashicorp-vault`
-- **`alias`** — the same alias you would use in `credential-reference` (for example `secret/database.password` for KV path `secret/database`, key `password`)
+- **`alias`** — the same alias you would use in `credential-reference` (for example `database?password` or `myapp/database?password`)
 
 **Example** (wherever WildFly resolves expressions in a supported stage, not in the pure management model stage):
 
 ```xml
 <system-properties>
-    <property name="example.secret" value="${HC_VAULT::my-vault:secret/database.password}"/>
+    <property name="example.secret" value="${HC_VAULT::my-vault:database?password}"/>
 </system-properties>
 ```
 
@@ -108,23 +108,25 @@ $WILDFLY_HOME/bin/jboss-cli.sh --connect
 
 /subsystem=hashicorp-vault/credential-store=secure-vault:add(
     host-address="https://vault.example.com:8200",
-    authentication-context=vault-tls-context,
+    client-ssl-context=vault-tls-context,
     credential-reference={clear-text="vault-token"}
 )
 
 /subsystem=hashicorp-vault/credential-store=my-vault:add-alias(
-    alias="secret/myapp.database_password",
+    alias="myapp/database?password",
     secret-value="supersecret"
 )
 ```
 
-Create the Elytron **`vault-tls-context`** (and related `ssl-context`, `trust-store`, etc.) **before** adding a credential store that references it.
+Create the Elytron **`vault-tls-context`** (`client-ssl-context`, `trust-manager`, `key-store`, etc.) **before** adding a credential store that references it.
 
 ## Alias Format
 
-The credential store uses the format `<vault-path>.<key>` to map WildFly credential references to Vault secrets:
+The credential store uses the format `[engine=TYPE][@mount-path][#]secret-path?key` to map WildFly credential references to Vault secrets:
 
-- `secret/database.password` maps to the `password` key in the `secret/database` path in Vault
-- `secret/myapp.database_password` maps to the `database_password` key in the `secret/myapp` path in Vault
+- `database?password` maps to key `password` in secret `database` under the default mount `secret` (KVv2)
+- `myapp/database?password` maps to key `password` in secret `myapp/database` under the default mount `secret`
+- `@custom-mount#myapp/database?password` maps to key `password` in secret `myapp/database` under mount `custom-mount`
+- `engine=KVv1@secret#myapp?password` explicitly specifies KVv1 engine
 
-The same alias form is used inside **`${HC_VAULT::store:alias}`** expressions.
+The same alias format is used inside **`${HC_VAULT::store:alias}`** expressions.

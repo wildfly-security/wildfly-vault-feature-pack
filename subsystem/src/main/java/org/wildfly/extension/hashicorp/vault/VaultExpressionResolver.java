@@ -6,16 +6,15 @@
 package org.wildfly.extension.hashicorp.vault;
 
 import static org.wildfly.common.Assert.checkNotNullParam;
-import static org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.HASHICORP_VAULT_CREDENTIAL_STORE_CAPABILITY;
+import static org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.VAULT_CREDENTIAL_STORE_API_CAPABILITY;
 
 import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
 
 import org.jboss.as.controller.ExpressionResolver;
 import org.jboss.as.controller.OperationContext;
+import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.extension.ExpressionResolverExtension;
-import org.jboss.msc.service.ServiceController;
-import org.jboss.msc.service.ServiceName;
-import org.jboss.msc.service.ServiceRegistry;
+import org.wildfly.common.function.ExceptionFunction;
 
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.credential.store.CredentialStore;
@@ -93,32 +92,24 @@ public final class VaultExpressionResolver implements ExpressionResolverExtensio
     }
 
     private static CredentialStore getCredentialStore(OperationContext context, String credentialStoreName, String expression) {
-        CredentialStore credentialStore;
         try {
-            ServiceName serviceName = context.getCapabilityServiceName(HASHICORP_VAULT_CREDENTIAL_STORE_CAPABILITY, credentialStoreName, CredentialStore.class);
-            ServiceRegistry registry = context.getServiceRegistry(false);
-            if (registry == null) {
-                throw new ExpressionResolver.ExpressionResolutionServerException(
-                        HashiCorpVaultLogger.ROOT_LOGGER.serviceRegistryUnavailableForVaultExpression());
-            }
-            ServiceController<?> controller = registry.getService(serviceName);
-            if (controller == null) {
-                throw new ExpressionResolver.ExpressionResolutionUserException(
-                        HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreNotInstalled(credentialStoreName, expression));
-            }
-            Object value = controller.getValue();
-            if (value == null) {
-                throw new ExpressionResolver.ExpressionResolutionUserException(
-                        HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreServiceNotStartedForExpression(credentialStoreName, expression));
-            }
-            credentialStore = (CredentialStore) value;
+            @SuppressWarnings("unchecked")
+            ExceptionFunction<OperationContext, CredentialStore, OperationFailedException> doohickey =
+                    context.getCapabilityRuntimeAPI(VAULT_CREDENTIAL_STORE_API_CAPABILITY,
+                            credentialStoreName, ExceptionFunction.class);
+            return doohickey.apply(context);
         } catch (ExpressionResolver.ExpressionResolutionUserException | ExpressionResolver.ExpressionResolutionServerException e) {
             throw e;
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // getCapabilityRuntimeAPI throws IllegalStateException when the capability is unknown/not registered,
+            // and IllegalArgumentException if the capability exists but does not expose a runtime API or is not dynamic.
+            // In either case, the requested vault credential store is not available.
             throw new ExpressionResolver.ExpressionResolutionUserException(
                     HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreNotAvailableDetail(credentialStoreName, e.getMessage()), e);
+        } catch (OperationFailedException e) {
+            throw new ExpressionResolver.ExpressionResolutionServerException(
+                    HashiCorpVaultLogger.ROOT_LOGGER.serviceRegistryUnavailableForVaultExpression(), e);
         }
-        return credentialStore;
     }
 
     private static String getPasswordFromObtainedCredential(PasswordCredential credential, String alias, String credentialStoreName) {

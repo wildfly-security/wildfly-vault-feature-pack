@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.HOST_ADDRESS;
 
 import java.io.IOException;
@@ -20,6 +21,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -82,6 +85,8 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     private static final String ATTR_SECRET_VALUE = CredentialStoreDefinition.SECRET_VALUE.getName();
     private static final String ATTR_PATH = CredentialStoreDefinition.PATH.getName();
     private static final String ATTR_RECURSIVE = CredentialStoreDefinition.RECURSIVE.getName();
+    private static final String ATTR_RECURSIVE_DEPTH = CredentialStoreDefinition.RECURSIVE_DEPTH.getName();
+    private static final String ATTR_MAX_NUMBER_OF_ALIASES = CredentialStoreDefinition.MAX_NUMBER_OF_ALIASES.getName();
 
     private static final String JBOSS_DEPLOYMENT_STRUCTURE = """
             <jboss-deployment-structure>
@@ -261,6 +266,144 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 assertEquals(SUCCESS, result.get(OUTCOME).asString(), "Cleanup remove-alias " + alias + " failed: " + result);
             }
         }
+    }
+
+    // =====================================================================
+    // read-aliases: recursive-depth and max-number-of-aliases
+    // =====================================================================
+
+    /**
+     * Builds a tree of four levels under {@code depth_tree} and verifies that {@code recursive-depth=N} limits the
+     * traversal to N levels below the starting path (0 = starting path only).
+     */
+    @Test
+    public void testReadAliasesRecursiveDepthLimitsTraversal(@ArquillianResource ManagementClient managementClient) throws IOException {
+        List<String> aliases = List.of(
+                "depth_tree?k0",
+                "depth_tree/l1?k1",
+                "depth_tree/l1/l2?k2",
+                "depth_tree/l1/l2/l3?k3");
+        for (String alias : aliases) {
+            addAlias(managementClient, alias);
+        }
+        try {
+            String path = "#depth_tree";
+            for (int depth = 0; depth < aliases.size(); depth++) {
+                Set<String> expected = aliases.subList(0, depth + 1).stream()
+                        .map(a -> "#" + a).collect(Collectors.toSet());
+                Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, depth, null));
+                assertEquals(expected, actual, "recursive-depth=" + depth + " should return levels 0.." + depth);
+            }
+
+            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
+            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, 100, null)),
+                    "A depth larger than the tree should return all aliases");
+            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, null)),
+                    "Default recursive-depth should return all aliases of the tree");
+        } finally {
+            removeAliases(managementClient, aliases);
+        }
+    }
+
+    /**
+     * Builds a tree of five secrets and verifies that {@code max-number-of-aliases=N} truncates the result to N
+     * entries, while a limit at or above the tree size returns everything.
+     */
+    @Test
+    public void testReadAliasesMaxNumberOfAliasesTruncatesResult(@ArquillianResource ManagementClient managementClient) throws IOException {
+        List<String> aliases = List.of(
+                "max_tree/a?key",
+                "max_tree/b?key",
+                "max_tree/c?key",
+                "max_tree/d?key",
+                "max_tree/e?key");
+        for (String alias : aliases) {
+            addAlias(managementClient, alias);
+        }
+        try {
+            String path = "#max_tree";
+            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
+
+            for (int max = 1; max < aliases.size(); max++) {
+                Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, null, max));
+                assertEquals(max, actual.size(), "max-number-of-aliases=" + max + " should truncate to " + max + ": " + actual);
+                assertTrue(all.containsAll(actual), "Truncated result must only contain tree aliases: " + actual);
+            }
+
+            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, aliases.size())),
+                    "max-number-of-aliases equal to the tree size should return everything");
+            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, 1000)),
+                    "max-number-of-aliases above the tree size should return everything");
+        } finally {
+            removeAliases(managementClient, aliases);
+        }
+    }
+
+    /**
+     * Verifies {@code recursive-depth} and {@code max-number-of-aliases} can be combined: the result is limited by
+     * whichever limit is hit first. Each scenario uses different values for the two limits and makes only one of
+     * them the binding one, so a failure identifies which limit is not honoured.
+     */
+    @Test
+    public void testReadAliasesRecursiveDepthAndMaxNumberOfAliasesCombined(@ArquillianResource ManagementClient managementClient) throws IOException {
+        List<String> aliases = List.of(
+                "combo_tree?k0",
+                "combo_tree/l1?k1",
+                "combo_tree/l1/l2?k2",
+                "combo_tree/l1/l2/l3?k3");
+
+        for (String alias : aliases) {
+            try {
+                addAlias(managementClient, alias);
+            } catch (IOException e) {
+                fail("Failed to add alias: " + alias + " during test setup: " + e.getMessage(), e);
+                throw e;
+            }
+        }
+
+        try {
+            String path = "#combo_tree";
+
+            // recursive-depth=2 is the binding limit: max-number-of-aliases=4 would still allow level 3
+            Set<String> depthBound = resultAsSet(readAliasesRecursive(managementClient, path, 2, 4));
+            System.out.println("[combined] recursive-depth=2, max-number-of-aliases=4 -> " + depthBound.size() + " aliases: " + depthBound);
+            Set<String> expectedDepthBound = aliases.subList(0, 3).stream().map(a -> "#" + a).collect(Collectors.toSet());
+            assertEquals(expectedDepthBound, depthBound,
+                    "recursive-depth=2 should be the binding limit (levels 0..2) with max-number-of-aliases=4");
+
+            // max-number-of-aliases=2 is the binding limit: recursive-depth=3 would allow all four levels
+            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
+            Set<String> maxBound = resultAsSet(readAliasesRecursive(managementClient, path, 3, 2));
+            System.out.println("[combined] recursive-depth=3, max-number-of-aliases=2 -> " + maxBound.size() + " aliases: " + maxBound);
+            assertEquals(2, maxBound.size(),
+                    "max-number-of-aliases=2 should be the binding limit with recursive-depth=3: " + maxBound);
+            assertTrue(all.containsAll(maxBound), "Truncated result must only contain tree aliases: " + maxBound);
+        } finally {
+            removeAliases(managementClient, aliases);
+        }
+    }
+
+    /**
+     * A negative {@code recursive-depth} is rejected with a clear failure description. Zero is valid and means
+     * "starting path only", so it is not rejected.
+     */
+    @Test
+    public void testReadAliasesInvalidRecursiveDepthRejected(@ArquillianResource ManagementClient managementClient) throws IOException {
+        assertReadAliasesFails(managementClient, -1, null, "recursive-depth must be non-negative, got: -1");
+        assertReadAliasesFails(managementClient, -100, null, "recursive-depth must be non-negative, got: -100");
+
+        ModelNode zeroDepth = readAliasesRecursive(managementClient, "#", 0, null);
+        assertEquals(SUCCESS, zeroDepth.get(OUTCOME).asString(), "recursive-depth=0 is valid: " + zeroDepth);
+    }
+
+    /**
+     * {@code max-number-of-aliases} of zero or a negative value is rejected with a clear failure description.
+     */
+    @Test
+    public void testReadAliasesInvalidMaxNumberOfAliasesRejected(@ArquillianResource ManagementClient managementClient) throws IOException {
+        assertReadAliasesFails(managementClient, null, 0, "maxNumberOfAliases must be positive, got: 0");
+        assertReadAliasesFails(managementClient, null, -1, "maxNumberOfAliases must be positive, got: -1");
+        assertReadAliasesFails(managementClient, null, -100, "maxNumberOfAliases must be positive, got: -100");
     }
 
     // =====================================================================
@@ -459,6 +602,56 @@ public class HashiCorpVaultCrudIntegrationTestCase {
 
     private static ModelNode executeOperation(ManagementClient client, ModelNode operation) throws IOException {
         return client.getControllerClient().execute(operation);
+    }
+
+    private static void addAlias(ManagementClient client, String alias) throws IOException {
+        ModelNode add = Util.createOperation(OP_ADD_ALIAS, CREDENTIAL_STORE_ADDRESS);
+        add.get(ATTR_ALIAS).set(alias);
+        add.get(ATTR_SECRET_VALUE).set("value-" + alias);
+        ModelNode result = executeOperation(client, add);
+        assertEquals(SUCCESS, result.get(OUTCOME).asString(), "add-alias " + alias + " should succeed: " + result);
+    }
+
+    private static void removeAliases(ManagementClient client, List<String> aliases) throws IOException {
+        for (String alias : aliases) {
+            ModelNode remove = Util.createOperation(OP_REMOVE_ALIAS, CREDENTIAL_STORE_ADDRESS);
+            remove.get(ATTR_ALIAS).set(alias);
+            executeOperation(client, remove);
+        }
+    }
+
+    /**
+     * Executes {@code read-aliases} with {@code recursive=true}; {@code recursiveDepth} and {@code maxNumberOfAliases}
+     * are only set when non-null.
+     */
+    private static ModelNode readAliasesRecursive(ManagementClient client, String path, Integer recursiveDepth,
+            Integer maxNumberOfAliases) throws IOException {
+        ModelNode read = Util.createOperation(OP_READ_ALIASES, CREDENTIAL_STORE_ADDRESS);
+        read.get(ATTR_PATH).set(path);
+        read.get(ATTR_RECURSIVE).set(true);
+        if (recursiveDepth != null) {
+            read.get(ATTR_RECURSIVE_DEPTH).set(recursiveDepth);
+        }
+        if (maxNumberOfAliases != null) {
+            read.get(ATTR_MAX_NUMBER_OF_ALIASES).set(maxNumberOfAliases);
+        }
+        return executeOperation(client, read);
+    }
+
+    private static Set<String> resultAsSet(ModelNode readResult) {
+        assertEquals(SUCCESS, readResult.get(OUTCOME).asString(), "read-aliases should succeed: " + readResult);
+        return readResult.get(RESULT).asList().stream().map(ModelNode::asString).collect(Collectors.toSet());
+    }
+
+    private static void assertReadAliasesFails(ManagementClient client, Integer recursiveDepth, Integer maxNumberOfAliases,
+            String expectedMessage) throws IOException {
+        ModelNode result = readAliasesRecursive(client, "#", recursiveDepth, maxNumberOfAliases);
+        assertEquals("failed", result.get(OUTCOME).asString(),
+                "read-aliases with recursive-depth=" + recursiveDepth + ", max-number-of-aliases=" + maxNumberOfAliases
+                        + " should fail: " + result);
+        String description = result.get(FAILURE_DESCRIPTION).asString();
+        assertTrue(description.contains(expectedMessage),
+                "Failure description should contain '" + expectedMessage + "' but was: " + description);
     }
 
     // =====================================================================

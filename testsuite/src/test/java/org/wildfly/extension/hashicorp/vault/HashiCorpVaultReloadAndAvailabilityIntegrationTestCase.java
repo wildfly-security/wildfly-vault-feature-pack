@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -28,6 +30,7 @@ import org.jboss.as.arquillian.api.ServerSetupTask;
 import org.jboss.as.arquillian.container.ManagementClient;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
+import org.jboss.as.controller.client.ModelControllerClient;
 import org.jboss.as.controller.operations.common.Util;
 import org.jboss.dmr.ModelNode;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -248,10 +251,23 @@ public class HashiCorpVaultReloadAndAvailabilityIntegrationTestCase {
 
     /**
      * Reloads the WildFly server and waits until it reaches {@code running} state.
+     * Creates a fresh {@link ModelControllerClient} for each poll iteration to avoid
+     * stale connections after the management port restarts during reload (follows the
+     * same pattern as WildFly's {@code ServerReload.waitForLiveServerToReload}).
      */
     private static void reloadServer(ManagementClient managementClient) throws Exception {
         ModelNode reloadOp = Util.createOperation("reload", PathAddress.EMPTY_ADDRESS);
-        managementClient.getControllerClient().execute(reloadOp);
+        try {
+            managementClient.getControllerClient().execute(reloadOp);
+        } catch (IOException e) {
+            final Throwable cause = e.getCause();
+            if (!(cause instanceof ExecutionException) && !(cause instanceof CancellationException)) {
+                throw e;
+            }
+        }
+
+        String address = managementClient.getMgmtAddress();
+        int port = managementClient.getMgmtPort();
 
         ModelNode readStateOp = Util.createOperation("read-attribute", PathAddress.EMPTY_ADDRESS);
         readStateOp.get("name").set("server-state");
@@ -259,14 +275,12 @@ public class HashiCorpVaultReloadAndAvailabilityIntegrationTestCase {
         long deadline = System.currentTimeMillis() + RELOAD_TIMEOUT_MILLIS;
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(RELOAD_POLL_INTERVAL_MILLIS);
-            try {
-                ModelNode result = managementClient.getControllerClient().execute(readStateOp);
-                if (SUCCESS.equals(result.get(OUTCOME).asString())
-                        && "running".equals(result.get(RESULT).asString())) {
+            try (ModelControllerClient client = ModelControllerClient.Factory.create(address, port)) {
+                ModelNode result = client.execute(readStateOp);
+                if ("running".equals(result.get(RESULT).asString())) {
                     return;
                 }
             } catch (IOException ignored) {
-                // Server is still reloading — connection refused or reset is expected
             }
         }
         throw new AssertionError("Server did not reach 'running' state within "

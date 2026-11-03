@@ -18,6 +18,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -68,6 +69,11 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
     private static final PathAddress ELYTRON_CS_ADDRESS = ELYTRON_ADDRESS.append(
             "credential-store", ELYTRON_CS_NAME);
 
+    private static final String ATTR_ALIAS = CredentialStoreDefinition.ALIAS.getName();
+    private static final String ATTR_SECRET_VALUE = CredentialStoreDefinition.SECRET_VALUE.getName();
+    private static final String ATTR_PATH = CredentialStoreDefinition.PATH.getName();
+    private static final String ATTR_RECURSIVE = CredentialStoreDefinition.RECURSIVE.getName();
+
     private static VaultContainer<?> vault;
 
     @Deployment
@@ -91,29 +97,37 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
         String normalizedAlias = "#" + alias;
         String secretValue = "chained-secret-value";
 
-        ModelNode addAlias = Util.createOperation("add-alias", VAULT_STORE_ADDRESS);
-        addAlias.get(CredentialStoreDefinition.ALIAS.getName()).set(alias);
-        addAlias.get(CredentialStoreDefinition.SECRET_VALUE.getName()).set(secretValue);
-        ModelNode addResult = executeOperation(managementClient, addAlias);
-        assertEquals(SUCCESS, addResult.get(OUTCOME).asString(),
-                "add-alias should succeed with chained token: " + addResult);
-
+        boolean aliasAdded = false;
+        Throwable testFailure = null;
         try {
+            ModelNode addAlias = Util.createOperation("add-alias", VAULT_STORE_ADDRESS);
+            addAlias.get(ATTR_ALIAS).set(alias);
+            addAlias.get(ATTR_SECRET_VALUE).set(secretValue);
+            ModelNode addResult = executeOperation(managementClient, addAlias);
+            assertEquals(SUCCESS, addResult.get(OUTCOME).asString(),
+                    "add-alias should succeed with chained token: " + addResult);
+            aliasAdded = true;
+
             ModelNode readAliases = Util.createOperation("read-aliases", VAULT_STORE_ADDRESS);
-            readAliases.get(CredentialStoreDefinition.PATH.getName()).set("");
-            readAliases.get(CredentialStoreDefinition.RECURSIVE.getName()).set(true);
+            readAliases.get(ATTR_PATH).set("");
+            readAliases.get(ATTR_RECURSIVE).set(true);
             ModelNode readResult = executeOperation(managementClient, readAliases);
             assertEquals(SUCCESS, readResult.get(OUTCOME).asString(),
                     "read-aliases should succeed: " + readResult);
             List<ModelNode> aliases = readResult.get(RESULT).asList();
             assertTrue(aliases.stream().anyMatch(n -> normalizedAlias.equals(n.asString())),
                     "Should contain the added alias '" + normalizedAlias + "': " + aliases);
+        } catch (Throwable t) {
+            testFailure = t;
+            throw t;
         } finally {
-            ModelNode removeAlias = Util.createOperation("remove-alias", VAULT_STORE_ADDRESS);
-            removeAlias.get(CredentialStoreDefinition.ALIAS.getName()).set(alias);
-            ModelNode removeResult = executeOperation(managementClient, removeAlias);
-            assertEquals(SUCCESS, removeResult.get(OUTCOME).asString(),
-                    "Cleanup of alias should succeed: " + removeResult);
+            List<Exception> cleanupFailures = new ArrayList<>();
+            if (aliasAdded) {
+                collectCleanupFailure(managementClient,
+                        removeAliasOp(VAULT_STORE_ADDRESS, alias),
+                        "Cleanup of alias", cleanupFailures);
+            }
+            throwCleanupFailures(cleanupFailures, testFailure);
         }
     }
 
@@ -129,17 +143,13 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
         String secretValue = "remove-me";
 
         ModelNode addAlias = Util.createOperation("add-alias", VAULT_STORE_ADDRESS);
-        addAlias.get(CredentialStoreDefinition.ALIAS.getName()).set(alias);
-        addAlias.get(CredentialStoreDefinition.SECRET_VALUE.getName()).set(secretValue);
-        ModelNode addResult = executeOperation(managementClient, addAlias);
-        assertEquals(SUCCESS, addResult.get(OUTCOME).asString(),
-                "add-alias should succeed: " + addResult);
+        addAlias.get(ATTR_ALIAS).set(alias);
+        addAlias.get(ATTR_SECRET_VALUE).set(secretValue);
+        assertOperationSuccess(managementClient, addAlias, "add-alias");
 
         ModelNode removeAlias = Util.createOperation("remove-alias", VAULT_STORE_ADDRESS);
-        removeAlias.get(CredentialStoreDefinition.ALIAS.getName()).set(alias);
-        ModelNode removeResult = executeOperation(managementClient, removeAlias);
-        assertEquals(SUCCESS, removeResult.get(OUTCOME).asString(),
-                "remove-alias should succeed with chained token: " + removeResult);
+        removeAlias.get(ATTR_ALIAS).set(alias);
+        assertOperationSuccess(managementClient, removeAlias, "remove-alias with chained token");
     }
 
     /**
@@ -180,14 +190,18 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
         String badStoreName = "vault-wrong-token-store";
         PathAddress badStoreAddress = SUBSYSTEM_ADDRESS.append("credential-store", badStoreName);
 
-        ModelNode storeWrongToken = Util.createOperation("add-alias", ELYTRON_CS_ADDRESS);
-        storeWrongToken.get("alias").set(wrongTokenAlias);
-        storeWrongToken.get("secret-value").set("bogus-not-a-real-token");
-        ModelNode storeResult = executeOperation(managementClient, storeWrongToken);
-        assertEquals(SUCCESS, storeResult.get(OUTCOME).asString(),
-                "Storing wrong token in Elytron CS should succeed: " + storeResult);
-
+        boolean wrongTokenStored = false;
+        boolean storeCreated = false;
+        Throwable testFailure = null;
         try {
+            ModelNode storeWrongToken = Util.createOperation("add-alias", ELYTRON_CS_ADDRESS);
+            storeWrongToken.get("alias").set(wrongTokenAlias);
+            storeWrongToken.get("secret-value").set("bogus-not-a-real-token");
+            ModelNode storeResult = executeOperation(managementClient, storeWrongToken);
+            assertEquals(SUCCESS, storeResult.get(OUTCOME).asString(),
+                    "Storing wrong token in Elytron CS should succeed: " + storeResult);
+            wrongTokenStored = true;
+
             ModelNode addBadStore = Util.createAddOperation(badStoreAddress);
             addBadStore.get(HOST_ADDRESS).set(vault.getHttpHostAddress());
             addBadStore.get("credential-reference", "store").set(ELYTRON_CS_NAME);
@@ -195,25 +209,34 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             ModelNode addResult = executeOperation(managementClient, addBadStore);
             assertEquals(SUCCESS, addResult.get(OUTCOME).asString(),
                     "Store creation should succeed (lazy initialization): " + addResult);
+            storeCreated = true;
 
             ModelNode addAlias = Util.createOperation("add-alias", badStoreAddress);
-            addAlias.get(CredentialStoreDefinition.ALIAS.getName()).set("should?fail");
-            addAlias.get(CredentialStoreDefinition.SECRET_VALUE.getName()).set("irrelevant");
+            addAlias.get(ATTR_ALIAS).set("should?fail");
+            addAlias.get(ATTR_SECRET_VALUE).set("irrelevant");
             ModelNode opResult = executeOperation(managementClient, addAlias);
             assertNotEquals(SUCCESS, opResult.get(OUTCOME).asString(),
                     "Operation with wrong token should fail: " + opResult);
+        } catch (Throwable t) {
+            testFailure = t;
+            throw t;
         } finally {
-            ModelNode removeBad = Util.createRemoveOperation(badStoreAddress);
-            removeBad.get("operation-headers", "allow-resource-service-restart").set(true);
-            ModelNode removeResult = executeOperation(managementClient, removeBad);
-            assertEquals(SUCCESS, removeResult.get(OUTCOME).asString(),
-                    "Cleanup of bad store should succeed: " + removeResult);
+            List<Exception> cleanupFailures = new ArrayList<>();
 
-            ModelNode removeWrongToken = Util.createOperation("remove-alias", ELYTRON_CS_ADDRESS);
-            removeWrongToken.get("alias").set(wrongTokenAlias);
-            ModelNode removeTokenResult = executeOperation(managementClient, removeWrongToken);
-            assertEquals(SUCCESS, removeTokenResult.get(OUTCOME).asString(),
-                    "Cleanup of wrong token alias should succeed: " + removeTokenResult);
+            if (storeCreated) {
+                ModelNode removeBad = Util.createRemoveOperation(badStoreAddress);
+                removeBad.get("operation-headers", "allow-resource-service-restart").set(true);
+                collectCleanupFailure(managementClient, removeBad,
+                        "Cleanup of bad store", cleanupFailures);
+            }
+
+            if (wrongTokenStored) {
+                collectCleanupFailure(managementClient,
+                        removeAliasOp(ELYTRON_CS_ADDRESS, wrongTokenAlias),
+                        "Cleanup of wrong token alias", cleanupFailures);
+            }
+
+            throwCleanupFailures(cleanupFailures, testFailure);
         }
     }
 
@@ -238,13 +261,17 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
         Path jbossHome = Path.of(System.getProperty("jboss.home"));
         Path ksFile = jbossHome.resolve("standalone/configuration/vault-backed-test.p12");
 
+        boolean secretStored = false;
+        boolean ksCreated = false;
+        Throwable testFailure = null;
         try {
             ModelNode addSecret = Util.createOperation("add-alias", VAULT_STORE_ADDRESS);
-            addSecret.get(CredentialStoreDefinition.ALIAS.getName()).set(ksPasswordAlias);
-            addSecret.get(CredentialStoreDefinition.SECRET_VALUE.getName()).set(ksPassword);
+            addSecret.get(ATTR_ALIAS).set(ksPasswordAlias);
+            addSecret.get(ATTR_SECRET_VALUE).set(ksPassword);
             ModelNode secretResult = executeOperation(managementClient, addSecret);
             assertEquals(SUCCESS, secretResult.get(OUTCOME).asString(),
                     "Storing keystore password in Vault should succeed: " + secretResult);
+            secretStored = true;
 
             createEmptyPkcs12(ksFile, ksPassword.toCharArray());
 
@@ -258,20 +285,33 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             assertEquals(SUCCESS, ksResult.get(OUTCOME).asString(),
                     "Elytron key-store with Vault-sourced password should load: " + ksResult
                     + (ksResult.hasDefined(FAILURE_DESCRIPTION) ? " / " + ksResult.get(FAILURE_DESCRIPTION) : ""));
+            ksCreated = true;
+        } catch (Throwable t) {
+            testFailure = t;
+            throw t;
         } finally {
-            ModelNode removeKs = Util.createRemoveOperation(ksAddress);
-            removeKs.get("operation-headers", "allow-resource-service-restart").set(true);
-            ModelNode removeKsResult = executeOperation(managementClient, removeKs);
-            assertEquals(SUCCESS, removeKsResult.get(OUTCOME).asString(),
-                    "Cleanup of key-store should succeed: " + removeKsResult);
+            List<Exception> cleanupFailures = new ArrayList<>();
 
-            ModelNode removeSecret = Util.createOperation("remove-alias", VAULT_STORE_ADDRESS);
-            removeSecret.get(CredentialStoreDefinition.ALIAS.getName()).set(ksPasswordAlias);
-            ModelNode removeSecretResult = executeOperation(managementClient, removeSecret);
-            assertEquals(SUCCESS, removeSecretResult.get(OUTCOME).asString(),
-                    "Cleanup of Vault alias should succeed: " + removeSecretResult);
+            if (ksCreated) {
+                ModelNode removeKs = Util.createRemoveOperation(ksAddress);
+                removeKs.get("operation-headers", "allow-resource-service-restart").set(true);
+                collectCleanupFailure(managementClient, removeKs,
+                        "Cleanup of key-store", cleanupFailures);
+            }
 
-            Files.deleteIfExists(ksFile);
+            if (secretStored) {
+                collectCleanupFailure(managementClient,
+                        removeAliasOp(VAULT_STORE_ADDRESS, ksPasswordAlias),
+                        "Cleanup of Vault alias", cleanupFailures);
+            }
+
+            try {
+                Files.deleteIfExists(ksFile);
+            } catch (IOException e) {
+                cleanupFailures.add(new RuntimeException("Cleanup of keystore file", e));
+            }
+
+            throwCleanupFailures(cleanupFailures, testFailure);
         }
     }
 
@@ -281,6 +321,46 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
 
     private static ModelNode executeOperation(ManagementClient client, ModelNode operation) throws IOException {
         return client.getControllerClient().execute(operation);
+    }
+
+    private static void assertOperationSuccess(ManagementClient client, ModelNode operation,
+                                               String description) throws IOException {
+        ModelNode result = executeOperation(client, operation);
+        assertEquals(SUCCESS, result.get(OUTCOME).asString(),
+                description + " should succeed: " + result);
+    }
+
+    private static void collectCleanupFailure(ManagementClient client, ModelNode operation,
+                                              String description, List<Exception> failures) {
+        try {
+            ModelNode result = executeOperation(client, operation);
+            if (!SUCCESS.equals(result.get(OUTCOME).asString())) {
+                failures.add(new RuntimeException(description + " failed: " + result));
+            }
+        } catch (Exception e) {
+            failures.add(new RuntimeException(description, e));
+        }
+    }
+
+    private static ModelNode removeAliasOp(PathAddress storeAddress, String alias) {
+        ModelNode op = Util.createOperation("remove-alias", storeAddress);
+        op.get(ATTR_ALIAS).set(alias);
+        return op;
+    }
+
+    private static void throwCleanupFailures(List<Exception> failures,
+                                             Throwable originalFailure) {
+        if (!failures.isEmpty()) {
+            AssertionError cleanupError = new AssertionError("Cleanup failed");
+            for (Exception failure : failures) {
+                cleanupError.addSuppressed(failure);
+            }
+            if (originalFailure != null) {
+                originalFailure.addSuppressed(cleanupError);
+            } else {
+                throw cleanupError;
+            }
+        }
     }
 
     private static void createEmptyPkcs12(Path path, char[] password) throws Exception {
@@ -303,8 +383,14 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
      */
     public static final class VaultSetup implements ServerSetupTask {
 
+        private static boolean elytronCsCreated;
+        private static boolean vaultStoreCreated;
+
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
+            elytronCsCreated = false;
+            vaultStoreCreated = false;
+
             vault = new VaultContainer<>(DockerImageName.parse(VaultImages.VAULT))
                     .withVaultToken(VAULT_TOKEN);
             vault.start();
@@ -319,6 +405,7 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             addElytronCs.get("create").set(true);
             addElytronCs.get("credential-reference", "clear-text").set(ELYTRON_CS_PASSWORD);
             VaultHttpsElytronSetup.executeSuccess(managementClient, addElytronCs);
+            elytronCsCreated = true;
 
             ModelNode storeToken = Util.createOperation("add-alias", ELYTRON_CS_ADDRESS);
             storeToken.get("alias").set(VAULT_TOKEN_ALIAS);
@@ -330,25 +417,43 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             addVaultStore.get("credential-reference", "store").set(ELYTRON_CS_NAME);
             addVaultStore.get("credential-reference", "alias").set(VAULT_TOKEN_ALIAS);
             VaultHttpsElytronSetup.executeSuccess(managementClient, addVaultStore);
+            vaultStoreCreated = true;
         }
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
-            try {
+            List<Exception> cleanupFailures = new ArrayList<>();
+
+            if (vaultStoreCreated) {
                 ModelNode removeVault = Util.createRemoveOperation(VAULT_STORE_ADDRESS);
                 removeVault.get("operation-headers", "allow-resource-service-restart").set(true);
-                managementClient.getControllerClient().execute(removeVault);
+                collectCleanupFailure(managementClient, removeVault,
+                        "tearDown: remove vault store", cleanupFailures);
+            }
 
+            if (elytronCsCreated) {
                 ModelNode removeElytronCs = Util.createRemoveOperation(ELYTRON_CS_ADDRESS);
                 removeElytronCs.get("operation-headers", "allow-resource-service-restart").set(true);
-                managementClient.getControllerClient().execute(removeElytronCs);
-            } finally {
-                if (vault != null) {
+                collectCleanupFailure(managementClient, removeElytronCs,
+                        "tearDown: remove elytron credential-store", cleanupFailures);
+            }
+
+            if (vault != null) {
+                try {
                     vault.stop();
+                } catch (Exception e) {
+                    cleanupFailures.add(new RuntimeException("tearDown: stop vault container", e));
                 }
+            }
+
+            try {
                 Path jbossHome = Path.of(System.getProperty("jboss.home"));
                 Files.deleteIfExists(jbossHome.resolve("standalone/configuration/token-source.p12"));
+            } catch (IOException e) {
+                cleanupFailures.add(new RuntimeException("tearDown: delete token-source.p12", e));
             }
+
+            throwCleanupFailures(cleanupFailures, null);
         }
     }
 }

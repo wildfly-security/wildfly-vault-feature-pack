@@ -284,7 +284,7 @@ public class HashiCorpVaultCrudIntegrationTestCase {
         assertEquals(SUCCESS, addResult.get(OUTCOME).asString(), "add-alias should succeed: " + addResult);
 
         try {
-            URI servletUri = URI.create("http://127.0.0.1:8080/vault-crud-test/vault-secret"
+            URI servletUri = managementClient.getWebUri().resolve("/vault-crud-test/vault-secret"
                     + "?store=" + CREDENTIAL_STORE_NAME + "&alias=" + alias);
             HttpResponse<String> response = HttpClient.newHttpClient()
                     .send(HttpRequest.newBuilder(servletUri).GET().build(), HttpResponse.BodyHandlers.ofString());
@@ -305,7 +305,7 @@ public class HashiCorpVaultCrudIntegrationTestCase {
      */
     @Test
     public void testDeployedApplicationReturnsNotFoundForMissingAlias(@ArquillianResource ManagementClient managementClient) throws Exception {
-        URI servletUri = URI.create("http://127.0.0.1:8080/vault-crud-test/vault-secret"
+        URI servletUri = managementClient.getWebUri().resolve("/vault-crud-test/vault-secret"
                 + "?store=" + CREDENTIAL_STORE_NAME + "&alias=crud?nonexistent_alias");
         HttpResponse<String> response = HttpClient.newHttpClient()
                 .send(HttpRequest.newBuilder(servletUri).GET().build(), HttpResponse.BodyHandlers.ofString());

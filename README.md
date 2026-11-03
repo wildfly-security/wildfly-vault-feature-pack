@@ -97,6 +97,23 @@ compiled classes, packaged artifacts and provisioned servers. Check the Failsafe
 successful Surefire run alone does not establish Vault compatibility. Vault image
 selection is defined by the test fixtures.
 
+### Testing with IPv4 and IPv6
+
+The managed integration tests use `node0` for the management connection (default
+`127.0.0.1`) and discover the HTTP address and port from the running server.
+After the initial build, verify both loopback addresses by selecting matching
+public and management bindings:
+
+```bash
+mvn -pl subsystem,testsuite verify -Dnode0=127.0.0.1 \
+  '-Dserver.jboss.args=--stability=default -b=127.0.0.1 -bmanagement=127.0.0.1'
+mvn -pl subsystem,testsuite verify -Dnode0=::1 \
+  '-Dserver.jboss.args=--stability=default -b=::1 -bmanagement=::1'
+```
+
+The IPv6 run requires IPv6 loopback support on the test host. Save each run's
+Failsafe reports before starting the next run so both results are retained.
+
 ### Testing with all Java versions
 
 To run tests against all supported Java versions (17, 21, 25) in a single command:

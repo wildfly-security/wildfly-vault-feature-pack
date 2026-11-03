@@ -20,6 +20,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -285,9 +286,11 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 "depth_tree/l1/l2?k2",
                 "depth_tree/l1/l2/l3?k3");
 
+        List<String> created = new ArrayList<>();
         try {
             for (String alias : aliases) {
                 addAlias(managementClient, alias);
+                created.add(alias);
             }
 
             String path = "#depth_tree";
@@ -303,8 +306,10 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                     "A depth larger than the tree should return all aliases");
             assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, null)),
                     "Default recursive-depth should return all aliases of the tree");
+        } catch (Throwable t) {
+            throw t;
         } finally {
-            removeAliases(managementClient, aliases);
+            cleanupAliases(managementClient, created);
         }
     }
 
@@ -322,9 +327,11 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 "max_tree/d?key",
                 "max_tree/e?key");
 
+        List<String> created = new ArrayList<>();
         try {
             for (String alias : aliases) {
                 addAlias(managementClient, alias);
+                created.add(alias);
             }
 
             String path = "#max_tree";
@@ -340,8 +347,10 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                     "max-number-of-aliases equal to the tree size should return everything");
             assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, 1000)),
                     "max-number-of-aliases above the tree size should return everything");
+        } catch (Throwable t) {
+            throw t;
         } finally {
-            removeAliases(managementClient, aliases);
+            cleanupAliases(managementClient, created);
         }
     }
 
@@ -359,10 +368,12 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 "combo_tree/l1/l2?k2",
                 "combo_tree/l1/l2/l3?k3");
 
+        List<String> created = new ArrayList<>();
         try {
             for (String alias : aliases) {
                 try {
                     addAlias(managementClient, alias);
+                    created.add(alias);
                 } catch (IOException e) {
                     fail("Failed to add alias: " + alias + " during test setup: " + e.getMessage(), e);
                     throw e;
@@ -384,8 +395,10 @@ public class HashiCorpVaultCrudIntegrationTestCase {
             assertEquals(2, maxBound.size(),
                     "max-number-of-aliases=2 should be the binding limit with recursive-depth=3: " + maxBound);
             assertTrue(all.containsAll(maxBound), "Truncated result must only contain tree aliases: " + maxBound);
+        } catch (Throwable t) {
+            throw t;
         } finally {
-            removeAliases(managementClient, aliases);
+            cleanupAliases(managementClient, created);
         }
     }
 
@@ -618,13 +631,30 @@ public class HashiCorpVaultCrudIntegrationTestCase {
         assertEquals(SUCCESS, result.get(OUTCOME).asString(), "add-alias " + alias + " should succeed: " + result);
     }
 
-    private static void removeAliases(ManagementClient client, List<String> aliases) throws IOException {
-        for (String alias : aliases) {
-            ModelNode remove = Util.createOperation(OP_REMOVE_ALIAS, CREDENTIAL_STORE_ADDRESS);
-            remove.get(ATTR_ALIAS).set(alias);
-            ModelNode result = executeOperation(client, remove);
-            assertEquals(SUCCESS, result.get(OUTCOME).asString(), "remove-alias " + alias + " should succeed: " + result);
+    /**
+     * Removes the given (successfully created) aliases, attempting every removal even if an earlier one fails.
+     * <p>
+     * Cleanup errors are reported in an {@link AssertionError} thrown after all removals were attempted.
+     */
+    private static void cleanupAliases(ManagementClient client, List<String> createdAliases) {
+        List<Throwable> cleanupErrors = new ArrayList<>();
+        for (String alias : createdAliases) {
+            // try to remove all the aliases that were added
+            try {
+                ModelNode remove = Util.createOperation(OP_REMOVE_ALIAS, CREDENTIAL_STORE_ADDRESS);
+                remove.get(ATTR_ALIAS).set(alias);
+                ModelNode result = executeOperation(client, remove);
+                assertEquals(SUCCESS, result.get(OUTCOME).asString(), "remove-alias " + alias + " should succeed: " + result);
+            } catch (Throwable t) {
+                cleanupErrors.add(t);
+            }
         }
+        if (cleanupErrors.isEmpty()) {
+            return;
+        }
+        AssertionError error = new AssertionError("Failed to remove " + cleanupErrors.size() + " alias(es) during cleanup");
+        cleanupErrors.forEach(error::addSuppressed);
+        throw error;
     }
 
     /**

@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<!-- 
+<!--
     Example WildFly standalone configuration with Vault subsystem
     This shows how to configure the Vault subsystem in your standalone.xml
 -->
@@ -15,7 +15,7 @@
 
     <profile>
         <!-- Other subsystems -->
-        
+
         <!-- Vault Subsystem Configuration -->
         <subsystem xmlns="urn:wildfly:vault:1.0">
             <!-- Production Vault connection -->
@@ -24,24 +24,24 @@
                         token="${VAULT_TOKEN}"
                         namespace="myapp"
                         ssl-verify="true"/>
-                        
+
             <!-- Development Vault connection -->
             <connection name="dev-vault"
                         url="http://localhost:8200"
                         token="${DEV_VAULT_TOKEN}"
                         ssl-verify="false"/>
         </subsystem>
-        
+
         <!-- Example: Datasource using Vault credentials -->
         <subsystem xmlns="urn:jboss:domain:datasources:7.0">
             <datasources>
-                <datasource jndi-name="java:jboss/datasources/PostgresDS" 
+                <datasource jndi-name="java:jboss/datasources/PostgresDS"
                            pool-name="PostgresDS">
                     <connection-url>jdbc:postgresql://localhost:5432/mydb</connection-url>
                     <driver>postgresql</driver>
                     <security>
                         <!-- This would use the Vault credential source -->
-                        <credential-reference store="vault" 
+                        <credential-reference store="vault"
                                             alias="database/prod/credentials"
                                             clear-text="false"/>
                     </security>

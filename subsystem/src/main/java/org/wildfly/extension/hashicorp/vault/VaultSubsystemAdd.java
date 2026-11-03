@@ -16,9 +16,9 @@ import org.jboss.dmr.ModelNode;
  *
  */
 public class VaultSubsystemAdd extends AbstractAddStepHandler {
-    
+
     public static final VaultSubsystemAdd INSTANCE = new VaultSubsystemAdd();
-    
+
     private VaultSubsystemAdd() {
         // Credential store capabilities are defined in CredentialStoreDefinition and VaultSubsystemDefinition
     }

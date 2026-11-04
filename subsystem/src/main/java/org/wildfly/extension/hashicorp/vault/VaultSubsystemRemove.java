@@ -13,9 +13,9 @@ import org.jboss.dmr.ModelNode;
  * Remove handler for the HashiCorp Vault subsystem.
  */
 public class VaultSubsystemRemove extends AbstractRemoveStepHandler {
-    
+
     public static final VaultSubsystemRemove INSTANCE = new VaultSubsystemRemove();
-    
+
     @Override
     protected void performRuntime(OperationContext context, ModelNode operation, ModelNode model)
             throws OperationFailedException {

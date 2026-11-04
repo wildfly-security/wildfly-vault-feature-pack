@@ -45,7 +45,7 @@ public class CrudAliasFixtureTestCase {
                     .map(format -> format.format("#tree/branch?key")).toList();
             List<String> expected = stability == Stability.DEFAULT
                     ? List.of("#tree/branch?key", "tree/branch?key")
-                    : List.of("#tree/branch?key", "secret/tree/branch.key");
+                    : List.of("#tree/branch?key", "tree/branch.key");
             assertEquals(expected, inputs, "Wrong formats at " + stability);
         }
     }

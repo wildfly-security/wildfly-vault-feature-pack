@@ -654,7 +654,8 @@ public class HashiCorpVaultCrudIntegrationTestCase {
             return switch (this) {
                 case QUALIFIED -> canonicalAlias;
                 case UNQUALIFIED -> canonicalAlias.substring(1);
-                case LEGACY -> "secret/" + canonicalAlias.substring(1).replace('?', '.');
+                // Dot-format aliases use the default mount; a mount prefix would become part of the secret path.
+                case LEGACY -> canonicalAlias.substring(1).replace('?', '.');
             };
         }
     }

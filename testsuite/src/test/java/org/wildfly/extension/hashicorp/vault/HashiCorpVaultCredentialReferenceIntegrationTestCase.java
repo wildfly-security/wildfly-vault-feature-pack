@@ -181,8 +181,10 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
      * Verifies that the Vault credential store fails when the Elytron credential store
      * contains a wrong token value. The store starts successfully (the token resolves) but
      * the first Vault operation fails because Vault rejects the invalid token.
-     * <p><b>Passes when:</b> {@code add-alias} fails with an authentication error,
-     * proving the token from the Elytron store is actually used for Vault authentication.
+     * <p><b>Passes when:</b> {@code add-alias} fails with {@code ELYHCVT0034}
+     * (all login strategies failed), proving the token from the Elytron store is actually
+     * used for Vault authentication and that the rejection is an auth failure, not an
+     * unrelated error.
      */
     @Test
     public void testWrongTokenValueCausesAuthFailure(@ArquillianResource ManagementClient managementClient) throws Exception {
@@ -217,6 +219,9 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             ModelNode opResult = executeOperation(managementClient, addAlias);
             assertNotEquals(SUCCESS, opResult.get(OUTCOME).asString(),
                     "Operation with wrong token should fail: " + opResult);
+            assertTrue(opResult.get(FAILURE_DESCRIPTION).asString().contains("ELYHCVT0034"),
+                    "Failure should indicate authentication rejection (all login strategies failed): "
+                    + opResult.get(FAILURE_DESCRIPTION));
         } catch (Throwable t) {
             testFailure = t;
             throw t;

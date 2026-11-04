@@ -77,6 +77,7 @@ public class NonVaultStoreRejectionIntegrationTestCase extends SubsystemJUnit5Te
     // -------------------------------------------------------------------------
 
     private static synchronized void ensureVaultStarted() {
+        VaultTestSupport.assumeDockerAvailable();
         if (vault != null) return;
         vault = new VaultContainer<>(DockerImageName.parse(VaultImages.VAULT))
                 .withVaultToken(VAULT_TOKEN);

@@ -298,8 +298,11 @@ public class HashiCorpVaultReloadAndAvailabilityIntegrationTestCase {
      */
     public static final class VaultSetup implements ServerSetupTask {
 
+        private boolean credentialStoreCreated;
+
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
+            VaultTestSupport.assumeDockerAvailable();
             int hostPort;
             try (ServerSocket socket = new ServerSocket(0)) {
                 hostPort = socket.getLocalPort();
@@ -315,6 +318,7 @@ public class HashiCorpVaultReloadAndAvailabilityIntegrationTestCase {
             add.get(HOST_ADDRESS).set(vault.getHttpHostAddress());
             add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
             VaultHttpsElytronSetup.executeSuccess(managementClient, add);
+            credentialStoreCreated = true;
         }
 
         @Override
@@ -328,12 +332,16 @@ public class HashiCorpVaultReloadAndAvailabilityIntegrationTestCase {
                         // Container may already be running or stopped
                     }
                 }
-                ModelNode remove = Util.createRemoveOperation(CREDENTIAL_STORE_ADDRESS);
-                remove.get("operation-headers", "allow-resource-service-restart").set(true);
-                managementClient.getControllerClient().execute(remove);
+                if (credentialStoreCreated) {
+                    ModelNode remove = Util.createRemoveOperation(CREDENTIAL_STORE_ADDRESS);
+                    remove.get("operation-headers", "allow-resource-service-restart").set(true);
+                    managementClient.getControllerClient().execute(remove);
+                    credentialStoreCreated = false;
+                }
             } finally {
                 if (vault != null) {
                     vault.stop();
+                    vault = null;
                 }
             }
         }

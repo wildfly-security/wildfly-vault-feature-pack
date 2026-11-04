@@ -4,8 +4,6 @@
  */
 package org.wildfly.extension.hashicorp.vault;
 
-import java.io.IOException;
-
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit5.ArquillianExtension;
@@ -34,19 +32,7 @@ public class HashiCorpVaultHttpsAuthenticationContextIntegrationTestCase {
     private static final String CREDENTIAL_STORE_NAME = "vault-https-store";
     private static final VaultHttpsElytronSetup.SetupNames NAMES = VaultHttpsElytronSetup.SetupNames.oneWayHttps();
 
-    private static final VaultContainerHttps<?> VAULT;
-
-    static {
-        try {
-            VAULT = new VaultContainerHttps<>(VaultImages.VAULT, false);
-            VAULT.withVaultToken(VAULT_TOKEN).withInitCommand(
-                    "secrets enable kv-v2",
-                    "kv put secret/testing1 top_secret=password123"
-            );
-        } catch (IOException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-    }
+    private static VaultContainerHttps<?> vault;
 
     @Deployment
     public static JavaArchive deployment() {
@@ -65,7 +51,7 @@ public class HashiCorpVaultHttpsAuthenticationContextIntegrationTestCase {
                 .append("credential-store", CREDENTIAL_STORE_NAME);
 
         ModelNode add = Util.createAddOperation(storeAddress);
-        add.get("host-address").set(VAULT.composeHttpsHostAddress());
+        add.get("host-address").set(vault.composeHttpsHostAddress());
         add.get("client-ssl-context").set(NAMES.sslContext);
         add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
 
@@ -78,18 +64,34 @@ public class HashiCorpVaultHttpsAuthenticationContextIntegrationTestCase {
 
     public static final class ElytronSetup implements ServerSetupTask {
 
+        private boolean elytronSetupStarted;
+
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            if (!VAULT.isRunning()) {
-                VAULT.start();
-            }
-            VaultHttpsElytronSetup.install(managementClient, VAULT, NAMES, false);
+            VaultTestSupport.assumeDockerAvailable();
+            vault = new VaultContainerHttps<>(VaultImages.VAULT, false);
+            vault.withVaultToken(VAULT_TOKEN).withInitCommand(
+                    "secrets enable kv-v2",
+                    "kv put secret/testing1 top_secret=password123"
+            );
+            vault.start();
+            elytronSetupStarted = true;
+            VaultHttpsElytronSetup.install(managementClient, vault, NAMES, false);
         }
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
-            VaultHttpsElytronSetup.tearDown(managementClient, NAMES, false);
-            VAULT.stop();
+            try {
+                if (elytronSetupStarted) {
+                    VaultHttpsElytronSetup.tearDown(managementClient, NAMES, false);
+                    elytronSetupStarted = false;
+                }
+            } finally {
+                if (vault != null) {
+                    vault.close();
+                    vault = null;
+                }
+            }
         }
     }
 }

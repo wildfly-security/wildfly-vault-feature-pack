@@ -20,8 +20,8 @@ import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.as.version.Stability;
 import org.jboss.dmr.ModelNode;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.utility.DockerImageName;
@@ -46,6 +46,7 @@ public class AliasFormatFeatureIntegrationTestCase extends SubsystemJUnit5TestCa
     private KernelServices kernelServices;
 
     private static synchronized void ensureVaultStarted() {
+        VaultTestSupport.assumeDockerAvailable();
         if (vault != null) {
             return;
         }
@@ -62,12 +63,12 @@ public class AliasFormatFeatureIntegrationTestCase extends SubsystemJUnit5TestCa
         vault.start();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void startVault() {
         ensureVaultStarted();
     }
 
-    @AfterClass
+    @AfterAll
     public static void stopVault() {
         if (vault != null) {
             vault.stop();

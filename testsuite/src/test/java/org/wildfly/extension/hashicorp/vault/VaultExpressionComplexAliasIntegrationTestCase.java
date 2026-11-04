@@ -59,6 +59,7 @@ public class VaultExpressionComplexAliasIntegrationTestCase extends SubsystemJUn
     private ImmutableCapabilityRegistry capabilityRegistry;
 
     private static synchronized void ensureVaultStarted() {
+        VaultTestSupport.assumeDockerAvailable();
         if (vault != null) {
             return;
         }

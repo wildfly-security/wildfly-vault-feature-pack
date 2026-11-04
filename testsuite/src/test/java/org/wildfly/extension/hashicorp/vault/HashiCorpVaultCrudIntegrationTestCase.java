@@ -40,6 +40,7 @@ import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.server.CurrentServiceContainer;
+import org.jboss.as.version.Stability;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
@@ -61,6 +62,8 @@ import org.wildfly.security.password.interfaces.ClearPassword;
  * Covers the user workflow: provision WildFly with feature-pack &rarr; add credential store &rarr;
  * add/read/remove aliases &rarr; verify secrets are accessible from a deployed application &rarr;
  * error handling for duplicates and missing aliases.
+ * Recursive-listing fixtures use qualified modern aliases at every stability, plus legacy aliases when
+ * Community features are enabled or unqualified modern aliases otherwise.
  */
 @ExtendWith(ArquillianExtension.class)
 @RunAsClient
@@ -280,31 +283,33 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     public void testReadAliasesRecursiveDepthLimitsTraversal(@ArquillianResource ManagementClient managementClient) throws IOException {
 
         List<String> aliases = List.of(
-                "depth_tree?k0",
-                "depth_tree/l1?k1",
-                "depth_tree/l1/l2?k2",
-                "depth_tree/l1/l2/l3?k3");
+                "#depth_tree?k0",
+                "#depth_tree/l1?k1",
+                "#depth_tree/l1/l2?k2",
+                "#depth_tree/l1/l2/l3?k3");
 
-        try {
-            for (String alias : aliases) {
-                addAlias(managementClient, alias);
+        for (AliasFormat format : aliasFormats(managementClient)) {
+            List<String> inputAliases = aliases.stream().map(format::format).toList();
+            try {
+                for (String alias : inputAliases) {
+                    addAlias(managementClient, alias);
+                }
+
+                String path = "#depth_tree";
+                for (int depth = 0; depth < aliases.size(); depth++) {
+                    Set<String> expected = Set.copyOf(aliases.subList(0, depth + 1));
+                    Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, depth, null));
+                    assertEquals(expected, actual, "recursive-depth=" + depth + " should return levels 0.." + depth);
+                }
+
+                Set<String> all = Set.copyOf(aliases);
+                assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, 100, null)),
+                        "A depth larger than the tree should return all aliases");
+                assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, null)),
+                        "Default recursive-depth should return all aliases of the tree");
+            } finally {
+                removeAliases(managementClient, inputAliases);
             }
-
-            String path = "#depth_tree";
-            for (int depth = 0; depth < aliases.size(); depth++) {
-                Set<String> expected = aliases.subList(0, depth + 1).stream()
-                        .map(a -> "#" + a).collect(Collectors.toSet());
-                Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, depth, null));
-                assertEquals(expected, actual, "recursive-depth=" + depth + " should return levels 0.." + depth);
-            }
-
-            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
-            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, 100, null)),
-                    "A depth larger than the tree should return all aliases");
-            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, null)),
-                    "Default recursive-depth should return all aliases of the tree");
-        } finally {
-            removeAliases(managementClient, aliases);
         }
     }
 
@@ -316,32 +321,35 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     public void testReadAliasesMaxNumberOfAliasesTruncatesResult(@ArquillianResource ManagementClient managementClient) throws IOException {
 
         List<String> aliases = List.of(
-                "max_tree/a?key",
-                "max_tree/b?key",
-                "max_tree/c?key",
-                "max_tree/d?key",
-                "max_tree/e?key");
+                "#max_tree/a?key",
+                "#max_tree/b?key",
+                "#max_tree/c?key",
+                "#max_tree/d?key",
+                "#max_tree/e?key");
 
-        try {
-            for (String alias : aliases) {
-                addAlias(managementClient, alias);
+        for (AliasFormat format : aliasFormats(managementClient)) {
+            List<String> inputAliases = aliases.stream().map(format::format).toList();
+            try {
+                for (String alias : inputAliases) {
+                    addAlias(managementClient, alias);
+                }
+
+                String path = "#max_tree";
+                Set<String> all = Set.copyOf(aliases);
+
+                for (int max = 1; max < aliases.size(); max++) {
+                    Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, null, max));
+                    assertEquals(max, actual.size(), "max-number-of-aliases=" + max + " should truncate to " + max + ": " + actual);
+                    assertTrue(all.containsAll(actual), "Truncated result must only contain tree aliases: " + actual);
+                }
+
+                assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, aliases.size())),
+                        "max-number-of-aliases equal to the tree size should return everything");
+                assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, 1000)),
+                        "max-number-of-aliases above the tree size should return everything");
+            } finally {
+                removeAliases(managementClient, inputAliases);
             }
-
-            String path = "#max_tree";
-            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
-
-            for (int max = 1; max < aliases.size(); max++) {
-                Set<String> actual = resultAsSet(readAliasesRecursive(managementClient, path, null, max));
-                assertEquals(max, actual.size(), "max-number-of-aliases=" + max + " should truncate to " + max + ": " + actual);
-                assertTrue(all.containsAll(actual), "Truncated result must only contain tree aliases: " + actual);
-            }
-
-            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, aliases.size())),
-                    "max-number-of-aliases equal to the tree size should return everything");
-            assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, 1000)),
-                    "max-number-of-aliases above the tree size should return everything");
-        } finally {
-            removeAliases(managementClient, aliases);
         }
     }
 
@@ -354,38 +362,41 @@ public class HashiCorpVaultCrudIntegrationTestCase {
     public void testReadAliasesRecursiveDepthAndMaxNumberOfAliasesCombined(@ArquillianResource ManagementClient managementClient) throws IOException {
 
         List<String> aliases = List.of(
-                "combo_tree?k0",
-                "combo_tree/l1?k1",
-                "combo_tree/l1/l2?k2",
-                "combo_tree/l1/l2/l3?k3");
+                "#combo_tree?k0",
+                "#combo_tree/l1?k1",
+                "#combo_tree/l1/l2?k2",
+                "#combo_tree/l1/l2/l3?k3");
 
-        try {
-            for (String alias : aliases) {
-                try {
-                    addAlias(managementClient, alias);
-                } catch (IOException e) {
-                    fail("Failed to add alias: " + alias + " during test setup: " + e.getMessage(), e);
-                    throw e;
+        for (AliasFormat format : aliasFormats(managementClient)) {
+            List<String> inputAliases = aliases.stream().map(format::format).toList();
+            try {
+                for (String alias : inputAliases) {
+                    try {
+                        addAlias(managementClient, alias);
+                    } catch (IOException e) {
+                        fail("Failed to add alias: " + alias + " during test setup: " + e.getMessage(), e);
+                        throw e;
+                    }
                 }
+                String path = "#combo_tree";
+
+                // recursive-depth=2 is the binding limit: max-number-of-aliases=4 would still allow level 3
+                Set<String> depthBound = resultAsSet(readAliasesRecursive(managementClient, path, 2, 4));
+                System.out.println("[combined] recursive-depth=2, max-number-of-aliases=4 -> " + depthBound.size() + " aliases: " + depthBound);
+                Set<String> expectedDepthBound = Set.copyOf(aliases.subList(0, 3));
+                assertEquals(expectedDepthBound, depthBound,
+                        "recursive-depth=2 should be the binding limit (levels 0..2) with max-number-of-aliases=4");
+
+                // max-number-of-aliases=2 is the binding limit: recursive-depth=3 would allow all four levels
+                Set<String> all = Set.copyOf(aliases);
+                Set<String> maxBound = resultAsSet(readAliasesRecursive(managementClient, path, 3, 2));
+                System.out.println("[combined] recursive-depth=3, max-number-of-aliases=2 -> " + maxBound.size() + " aliases: " + maxBound);
+                assertEquals(2, maxBound.size(),
+                        "max-number-of-aliases=2 should be the binding limit with recursive-depth=3: " + maxBound);
+                assertTrue(all.containsAll(maxBound), "Truncated result must only contain tree aliases: " + maxBound);
+            } finally {
+                removeAliases(managementClient, inputAliases);
             }
-            String path = "#combo_tree";
-
-            // recursive-depth=2 is the binding limit: max-number-of-aliases=4 would still allow level 3
-            Set<String> depthBound = resultAsSet(readAliasesRecursive(managementClient, path, 2, 4));
-            System.out.println("[combined] recursive-depth=2, max-number-of-aliases=4 -> " + depthBound.size() + " aliases: " + depthBound);
-            Set<String> expectedDepthBound = aliases.subList(0, 3).stream().map(a -> "#" + a).collect(Collectors.toSet());
-            assertEquals(expectedDepthBound, depthBound,
-                    "recursive-depth=2 should be the binding limit (levels 0..2) with max-number-of-aliases=4");
-
-            // max-number-of-aliases=2 is the binding limit: recursive-depth=3 would allow all four levels
-            Set<String> all = aliases.stream().map(a -> "#" + a).collect(Collectors.toSet());
-            Set<String> maxBound = resultAsSet(readAliasesRecursive(managementClient, path, 3, 2));
-            System.out.println("[combined] recursive-depth=3, max-number-of-aliases=2 -> " + maxBound.size() + " aliases: " + maxBound);
-            assertEquals(2, maxBound.size(),
-                    "max-number-of-aliases=2 should be the binding limit with recursive-depth=3: " + maxBound);
-            assertTrue(all.containsAll(maxBound), "Truncated result must only contain tree aliases: " + maxBound);
-        } finally {
-            removeAliases(managementClient, aliases);
         }
     }
 
@@ -616,6 +627,29 @@ public class HashiCorpVaultCrudIntegrationTestCase {
         add.get(ATTR_SECRET_VALUE).set("value-" + alias);
         ModelNode result = executeOperation(client, add);
         assertEquals(SUCCESS, result.get(OUTCOME).asString(), "add-alias " + alias + " should succeed: " + result);
+    }
+
+    static List<AliasFormat> aliasFormats(ManagementClient client) throws IOException {
+        ModelNode read = Util.getReadAttributeOperation(
+                PathAddress.pathAddress("core-service", "server-environment"), "stability");
+        ModelNode result = executeOperation(client, read);
+        assertEquals(SUCCESS, result.get(OUTCOME).asString(), "Reading server stability should succeed: " + result);
+        Stability stability = Stability.fromString(result.get(RESULT).asString());
+        return stability.enables(Stability.COMMUNITY)
+                ? List.of(AliasFormat.QUALIFIED, AliasFormat.LEGACY)
+                : List.of(AliasFormat.QUALIFIED, AliasFormat.UNQUALIFIED);
+    }
+
+    enum AliasFormat {
+        QUALIFIED, UNQUALIFIED, LEGACY;
+
+        String format(String canonicalAlias) {
+            return switch (this) {
+                case QUALIFIED -> canonicalAlias;
+                case UNQUALIFIED -> canonicalAlias.substring(1);
+                case LEGACY -> "secret/" + canonicalAlias.substring(1).replace('?', '.');
+            };
+        }
     }
 
     private static void removeAliases(ManagementClient client, List<String> aliases) throws IOException {

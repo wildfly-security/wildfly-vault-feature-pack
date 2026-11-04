@@ -114,6 +114,13 @@ mvn -pl subsystem,testsuite verify -Dnode0=::1 \
 The IPv6 run requires IPv6 loopback support on the test host. Save each run's
 Failsafe reports before starting the next run so both results are retained.
 
+The recursive alias-listing tests read the running server's stability. They exercise
+qualified modern aliases at every stability, plus legacy aliases when Community
+features are enabled or unqualified modern aliases at Default. Repeat the commands
+with `--stability=community` to cover legacy compatibility; modern aliases need
+qualification (for example, `#myapp/database?password`) to avoid legacy path
+interpretation at Community.
+
 ### Testing with all Java versions
 
 To run tests against all supported Java versions (17, 21, 25) in a single command:

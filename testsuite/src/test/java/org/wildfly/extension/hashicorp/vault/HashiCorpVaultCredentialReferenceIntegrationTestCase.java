@@ -385,18 +385,20 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
 
         private static boolean elytronCsCreated;
         private static boolean vaultStoreCreated;
+        private Path csFile;
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
             elytronCsCreated = false;
             vaultStoreCreated = false;
 
+            VaultTestSupport.assumeDockerAvailable();
             vault = new VaultContainer<>(DockerImageName.parse(VaultImages.VAULT))
                     .withVaultToken(VAULT_TOKEN);
             vault.start();
 
             Path jbossHome = Path.of(System.getProperty("jboss.home"));
-            Path csFile = jbossHome.resolve("standalone/configuration/token-source.p12");
+            csFile = jbossHome.resolve("standalone/configuration/token-source.p12");
             Files.deleteIfExists(csFile);
 
             ModelNode addElytronCs = Util.createAddOperation(ELYTRON_CS_ADDRESS);
@@ -441,14 +443,17 @@ public class HashiCorpVaultCredentialReferenceIntegrationTestCase {
             if (vault != null) {
                 try {
                     vault.stop();
+                    vault = null;
                 } catch (Exception e) {
                     cleanupFailures.add(new RuntimeException("tearDown: stop vault container", e));
                 }
             }
 
             try {
-                Path jbossHome = Path.of(System.getProperty("jboss.home"));
-                Files.deleteIfExists(jbossHome.resolve("standalone/configuration/token-source.p12"));
+                if (csFile != null) {
+                    Files.deleteIfExists(csFile);
+                    csFile = null;
+                }
             } catch (IOException e) {
                 cleanupFailures.add(new RuntimeException("tearDown: delete token-source.p12", e));
             }

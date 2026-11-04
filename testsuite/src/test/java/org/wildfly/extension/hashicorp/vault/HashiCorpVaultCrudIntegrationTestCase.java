@@ -785,8 +785,11 @@ public class HashiCorpVaultCrudIntegrationTestCase {
      */
     public static final class VaultSetup implements ServerSetupTask {
 
+        private boolean credentialStoreCreated;
+
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
+            VaultTestSupport.assumeDockerAvailable();
             vault = new VaultContainer<>(DockerImageName.parse(VaultImages.VAULT))
                     .withVaultToken(VAULT_TOKEN)
                     .withInitCommand(
@@ -805,17 +808,22 @@ public class HashiCorpVaultCrudIntegrationTestCase {
             add.get(HOST_ADDRESS).set(vault.getHttpHostAddress());
             add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
             VaultHttpsElytronSetup.executeSuccess(managementClient, add);
+            credentialStoreCreated = true;
         }
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
             try {
-                ModelNode remove = Util.createRemoveOperation(CREDENTIAL_STORE_ADDRESS);
-                remove.get("operation-headers", "allow-resource-service-restart").set(true);
-                managementClient.getControllerClient().execute(remove);
+                if (credentialStoreCreated) {
+                    ModelNode remove = Util.createRemoveOperation(CREDENTIAL_STORE_ADDRESS);
+                    remove.get("operation-headers", "allow-resource-service-restart").set(true);
+                    managementClient.getControllerClient().execute(remove);
+                    credentialStoreCreated = false;
+                }
             } finally {
                 if (vault != null) {
                     vault.stop();
+                    vault = null;
                 }
             }
         }

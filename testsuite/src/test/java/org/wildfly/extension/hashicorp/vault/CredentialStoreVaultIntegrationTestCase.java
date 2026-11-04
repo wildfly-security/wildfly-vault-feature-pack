@@ -24,8 +24,8 @@ import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.dmr.ModelNode;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.utility.DockerImageName;
@@ -46,8 +46,9 @@ public class CredentialStoreVaultIntegrationTestCase extends SubsystemJUnit5Test
 
     private KernelServices kernelServices;
 
-    /** Starts Testcontainers Vault once (also from {@link #getSubsystemXml()} when JUnit Platform skips {@code @BeforeClass}). */
+    /** Starts Testcontainers Vault once, including initialization through {@link #getSubsystemXml()}. */
     private static synchronized void ensureVaultStarted() {
+        VaultTestSupport.assumeDockerAvailable();
         if (vault != null) {
             return;
         }
@@ -62,12 +63,12 @@ public class CredentialStoreVaultIntegrationTestCase extends SubsystemJUnit5Test
         vault.start();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void startVault() {
         ensureVaultStarted();
     }
 
-    @AfterClass
+    @AfterAll
     public static void stopVault() {
         if (vault != null) {
             vault.stop();

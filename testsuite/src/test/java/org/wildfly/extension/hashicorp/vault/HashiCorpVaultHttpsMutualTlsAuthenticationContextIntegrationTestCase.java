@@ -49,19 +49,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
     private static final String CERT_AUTH_POLICY = "admin";
     private static final VaultHttpsElytronSetup.SetupNames NAMES = VaultHttpsElytronSetup.SetupNames.mutualTls();
 
-    private static final VaultContainerHttps<?> VAULT;
-
-    static {
-        try {
-            VAULT = new VaultContainerHttps<>(VaultImages.VAULT, true);
-            VAULT.withVaultToken(VAULT_TOKEN).withInitCommand(
-                    "secrets enable kv-v2",
-                    "kv put secret/testing1 top_secret=password123"
-            );
-        } catch (IOException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-    }
+    private static VaultContainerHttps<?> vault;
 
     @Deployment
     public static JavaArchive deployment() {
@@ -80,7 +68,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
                 .append("credential-store", CREDENTIAL_STORE_NAME);
 
         ModelNode add = Util.createAddOperation(storeAddress);
-        add.get("host-address").set(VAULT.composeHttpsHostAddress());
+        add.get("host-address").set(vault.composeHttpsHostAddress());
         add.get("client-ssl-context").set(NAMES.sslContext);
         add.get("credential-reference", "clear-text").set(VAULT_TOKEN);
 
@@ -104,7 +92,7 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
                 .append("credential-store", CERT_AUTH_STORE_NAME);
 
         ModelNode add = Util.createAddOperation(storeAddress);
-        add.get("host-address").set(VAULT.composeHttpsHostAddress());
+        add.get("host-address").set(vault.composeHttpsHostAddress());
         add.get("client-ssl-context").set(NAMES.sslContext);
         VaultHttpsElytronSetup.executeSuccess(managementClient, add);
 
@@ -143,13 +131,13 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
      */
     @Test
     public void testCredentialStoreWithoutTokenFailsWhenCertAuthNotEnabled(@ArquillianResource ManagementClient managementClient) throws Exception {
-        VAULT.execInContainer("vault", "auth", "disable", "cert");
+        vault.execInContainer("vault", "auth", "disable", "cert");
 
         PathAddress storeAddress = PathAddress.pathAddress(PathElement.pathElement("subsystem", "hashicorp-vault"))
                 .append("credential-store", "vault-no-auth-store");
         try {
             ModelNode add = Util.createAddOperation(storeAddress);
-            add.get("host-address").set(VAULT.composeHttpsHostAddress());
+            add.get("host-address").set(vault.composeHttpsHostAddress());
             add.get("client-ssl-context").set(NAMES.sslContext);
 
             ModelNode addResponse = managementClient.getControllerClient().execute(add);
@@ -175,32 +163,48 @@ public class HashiCorpVaultHttpsMutualTlsAuthenticationContextIntegrationTestCas
 
     private static void enableVaultCertAuth() throws Exception {
         // Disable first to make this idempotent (ignore errors if not enabled)
-        VAULT.execInContainer("vault", "auth", "disable", "cert");
-        VAULT.execInContainer("vault", "auth", "enable", "cert");
-        VAULT.execInContainer("vault", "write", "auth/cert/certs/" + CERT_AUTH_ROLE,
+        vault.execInContainer("vault", "auth", "disable", "cert");
+        vault.execInContainer("vault", "auth", "enable", "cert");
+        vault.execInContainer("vault", "write", "auth/cert/certs/" + CERT_AUTH_ROLE,
                 "display_name=" + CERT_AUTH_ROLE, "policies=" + CERT_AUTH_POLICY,
                 "certificate=@" + CERT_AUTH_CONTAINER_PATH);
     }
 
     public static final class ElytronSetup implements ServerSetupTask {
 
+        private boolean elytronSetupStarted;
+
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            if (!VAULT.isRunning()) {
-                VAULT.start();
-            }
-            Path clientCert = VAULT.getClientCertificateFiles().clientCertFile();
-            VAULT.copyFileToContainer(
+            VaultTestSupport.assumeDockerAvailable();
+            vault = new VaultContainerHttps<>(VaultImages.VAULT, true);
+            vault.withVaultToken(VAULT_TOKEN).withInitCommand(
+                    "secrets enable kv-v2",
+                    "kv put secret/testing1 top_secret=password123"
+            );
+            vault.start();
+            Path clientCert = vault.getClientCertificateFiles().clientCertFile();
+            vault.copyFileToContainer(
                     MountableFile.forHostPath(clientCert, 0644),
                     CERT_AUTH_CONTAINER_PATH);
             enableVaultCertAuth();
-            VaultHttpsElytronSetup.install(managementClient, VAULT, NAMES, true);
+            elytronSetupStarted = true;
+            VaultHttpsElytronSetup.install(managementClient, vault, NAMES, true);
         }
 
         @Override
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
-            VaultHttpsElytronSetup.tearDown(managementClient, NAMES, true);
-            VAULT.stop();
+            try {
+                if (elytronSetupStarted) {
+                    VaultHttpsElytronSetup.tearDown(managementClient, NAMES, true);
+                    elytronSetupStarted = false;
+                }
+            } finally {
+                if (vault != null) {
+                    vault.close();
+                    vault = null;
+                }
+            }
         }
     }
 }

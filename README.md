@@ -83,7 +83,13 @@ Toolchains are activated only when `jdk.test.version` is set. If `jdk.test.vendo
 `verify` runs both Surefire tests and the Vault integration tests through Failsafe,
 and fails the build if either suite fails. `mvn test` runs only the Surefire tests.
 Vault integration tests require a Docker-compatible container runtime, such as Docker
-or Podman. With a selected toolchain, both Failsafe and its managed WildFly server
+or Podman. Container-dependent tests use JUnit Jupiter assumptions to skip when no
+runtime is available, including when the test JAR is imported by WildFly. Once a
+runtime is available, container startup and Vault failures still fail the tests.
+Container-free tests, including the managed-server JDK check, continue to run.
+`DockerUnavailableTestCase` checks early initialization and skipped-setup cleanup
+in environments without a runtime; it skips when a runtime is available.
+With a selected toolchain, both Failsafe and its managed WildFly server
 use that JDK; Maven continues to run on the build JDK (Java 25 or later).
 
 CI builds artifacts once with tests skipped, then runs `mvn -pl subsystem,testsuite verify` for each JDK

@@ -310,8 +310,6 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                         "A depth larger than the tree should return all aliases");
                 assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, null)),
                         "Default recursive-depth should return all aliases of the tree");
-            } catch (Throwable t) {
-                throw t;
             } finally {
                 cleanupAliases(managementClient, created);
             }
@@ -354,8 +352,6 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                         "max-number-of-aliases equal to the tree size should return everything");
                 assertEquals(all, resultAsSet(readAliasesRecursive(managementClient, path, null, 1000)),
                         "max-number-of-aliases above the tree size should return everything");
-            } catch (Throwable t) {
-                throw t;
             } finally {
                 cleanupAliases(managementClient, created);
             }
@@ -405,8 +401,6 @@ public class HashiCorpVaultCrudIntegrationTestCase {
                 assertEquals(2, maxBound.size(),
                         "max-number-of-aliases=2 should be the binding limit with recursive-depth=3: " + maxBound);
                 assertTrue(all.containsAll(maxBound), "Truncated result must only contain tree aliases: " + maxBound);
-            } catch (Throwable t) {
-                throw t;
             } finally {
                 cleanupAliases(managementClient, created);
             }

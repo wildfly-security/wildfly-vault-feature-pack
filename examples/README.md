@@ -156,12 +156,15 @@ Encode these characters when they are part of a key name or a secret path:
 
 A key path that ends at a JSON object is not a credential value and does not resolve; use a key path that ends at a value. `add-alias` changes only the value at the key path and leaves sibling keys and their JSON types unchanged, and `remove-alias` removes only that value.
 
-These rules require a version of `wildfly-elytron-hashicorp-vault` that includes [PR #107](https://github.com/wildfly-security/wildfly-elytron-hashicorp-vault/pull/107). See the library's `docs/alias-format.md` for the complete alias specification.
+These rules are supported by `wildfly-elytron-hashicorp-vault` version `1.1.0.Final`. See the library's `docs/alias-format.md` for the complete alias specification.
 
 ### Legacy alias format
 
 The older `secret-path.key` format is accepted only when Community stability is enabled (`--stability=community`) and is rejected at the default stability. It is kept for compatibility; prefer the format above.
 
-- The alias is split on its **last** dot, wherever that is. `my.app/config` is secret `my` with key `app/config`; write `my.app/config?key` for such names.
-- The default mount is always used. A leading `secret/` is part of the secret path, not a mount.
-- The key is URL-decoded **before** it is split on `/`, so in a legacy alias `%2F` is nested traversal, unlike the format above where it is a literal slash. An unencoded `+` is a space.
+- Trailing dots are discarded, then the alias is split on its **last** dot. `my.app/config` is secret `my` with the literal key `app/config`.
+- The first path segment selects the mount: `secret/app.key` addresses secret `app` on mount `secret`. Paths without a slash use the default mount. Use `#path?key` or `@mount#path?key` for an explicit modern alias during migration.
+- Legacy keys stay literal: `/`, `%2F`, and `+` are part of the key name. For example, `secret/app.a/b` maps to modern alias `@secret#app?a%2Fb`, while `secret/app.a%2Fb` maps to `@secret#app?a%252Fb`.
+- Percent escapes in the secret path follow HTTP path semantics, so `%20` denotes a space and `+` remains a plus. Unescaped `?` and `#` in the path begin a query or fragment; version-selecting queries require legacy support.
+
+These legacy semantics preserve `1.0.1.Final` compatibility. The `1.1.0.CR1` through `CR3` releases decoded legacy keys and treated slashes in them as traversal; check the intended destination when migrating configurations from those releases.

@@ -51,18 +51,15 @@ import org.testcontainers.vault.VaultContainer;
 
 /**
  * Integration tests for the legacy dot-separated alias format ({@code secret-path.key}), which is only accepted at
- * {@link Stability#COMMUNITY} stability or above.
+ * {@link Stability#COMMUNITY} stability or a level that enables it.
  * <p>
- * wildfly-elytron-hashicorp-vault PR #107 changed how the key path of a <em>new</em> format alias is split and decoded,
- * but states that legacy handling must remain identical to 1.1.0.CR3. These tests pin that legacy behavior, and where
+ * The 1.1.0.Final library preserves the literal legacy key behavior of 1.0.1.Final. These tests pin that behavior, and where
  * it differs from the new format they assert both sides:
  * <ul>
  *   <li>the alias is split on its <b>last</b> dot, wherever that is: {@code my.app/config} is secret {@code my},
- *       key {@code app/config}</li>
- *   <li>the default mount is always used, so a leading {@code secret/} is part of the secret path</li>
- *   <li>the key is URL-decoded <em>before</em> it is split on {@code /}, so {@code %2F} is nested traversal (in the
- *       new format it is a literal slash)</li>
- *   <li>an unencoded {@code +} is a space</li>
+ *       literal key {@code app/config}; trailing dots are discarded before splitting</li>
+ *   <li>the first path segment selects the mount; paths without a slash use the default mount</li>
+ *   <li>keys are not decoded or split: {@code /}, {@code %2F}, and {@code +} remain literal</li>
  * </ul>
  */
 public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCase {
@@ -172,7 +169,7 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
                 { "password": "multi-part" }
                 """);
 
-        assertEquals("multi-part", resolve("legacy/app/database.password"));
+        assertEquals("multi-part", resolve("secret/legacy/app/database.password"));
     }
 
     /** Dots before the last dot belong to the secret path, so only the final dot separates the key. */
@@ -187,42 +184,46 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
 
     /**
      * The alias is split on its last dot even when that dot is before a slash: {@code my.app/config} is secret
-     * {@code my} and key {@code app/config}. The new format needs {@code my.app/config?key} for such names.
+     * {@code my} and literal key {@code app/config}.
      */
     @Test
-    public void testLegacyLastDotBeforeSlashSplitsSecretAndNestedKey() throws Exception {
+    public void testLegacyLastDotBeforeSlashSplitsSecretAndLiteralKey() throws Exception {
         seedSecret("my", """
-                { "app": { "config": "split-at-last-dot" } }
+                { "app/config": "split-at-last-dot", "app": { "config": "nested" } }
                 """);
 
         assertEquals("split-at-last-dot", resolve("my.app/config"));
+        assertEquals("split-at-last-dot", resolve("#my?app%2Fconfig"));
+        assertEquals("nested", resolve("#my?app/config"));
     }
 
     /**
-     * Legacy aliases always use the default mount: the {@code secret/} prefix is not interpreted as a mount, it
-     * becomes part of the secret path, so {@code secret/in-mount.key} reads the secret {@code secret/in-mount}.
+     * The first legacy path segment selects the mount, so {@code secret/in-mount.key} reads {@code in-mount}
+     * on the {@code secret} mount, without duplicating the mount prefix.
      */
     @Test
-    public void testLegacyMountPrefixBecomesPartOfSecretPath() throws Exception {
+    public void testLegacyMountPrefixSelectsMount() throws Exception {
         seedSecret("secret/in-mount", """
-                { "key": "prefix-is-path" }
+                { "key": "duplicated-mount" }
                 """);
         seedSecret("in-mount", """
-                { "key": "not-this-one" }
+                { "key": "mount-qualified" }
                 """);
 
-        assertEquals("prefix-is-path", resolve("secret/in-mount.key"));
-        assertEquals("not-this-one", resolve("in-mount.key"));
+        assertEquals("mount-qualified", resolve("secret/in-mount.key"));
+        assertEquals("mount-qualified", resolve("in-mount.key"));
+        assertEquals("mount-qualified", resolve("@secret#in-mount?key"));
+        assertEquals("duplicated-mount", resolve("#secret/in-mount?key"));
     }
 
     /** The secret path of a legacy alias is URL-decoded. */
     @Test
     public void testLegacyAliasSecretPathIsUrlDecoded() throws Exception {
-        seedSecret("legacy space/50%off", """
+        seedSecret("legacy space/50%off/a+b", """
                 { "key": "decoded-path" }
                 """);
 
-        assertEquals("decoded-path", resolve("legacy%20space/50%25off.key"));
+        assertEquals("decoded-path", resolve("secret/legacy%20space/50%25off/a+b.key"));
     }
 
     // =====================================================================
@@ -230,31 +231,58 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
     // =====================================================================
 
     /**
-     * The legacy key is decoded <em>before</em> it is split on {@code /}, so {@code %2F} is nested traversal. This is
-     * the opposite of the new format, where {@code %2F} in a key path is a literal slash.
+     * Legacy keys remain literal. The three slash spellings select distinct values, while modern aliases
+     * decode each key segment and use an unencoded slash for traversal.
      */
     @Test
-    public void testLegacyEncodedSlashIsNestedTraversalUnlikeNewFormat() throws Exception {
+    public void testLegacySlashAndPercentAreLiteralUnlikeNewFormat() throws Exception {
         seedSecret("legacy-slash", """
-                { "k": { "z": "nested" }, "k/z": "literal-slash" }
+                { "k": { "z": "nested" }, "k/z": "literal-slash", "k%2Fz": "literal-percent" }
                 """);
 
-        assertEquals("nested", resolve("legacy-slash.k%2Fz"), "Legacy %2F is nested traversal");
-        assertEquals("nested", resolve("legacy-slash.k/z"), "Legacy / is nested traversal");
+        assertEquals("literal-percent", resolve("legacy-slash.k%2Fz"), "Legacy %2F stays literal");
+        assertEquals("literal-slash", resolve("legacy-slash.k/z"), "Legacy / stays literal");
+        assertEquals("literal-percent", resolve("#legacy-slash?k%252Fz"));
         assertEquals("literal-slash", resolve("#legacy-slash?k%2Fz"), "New format %2F is a literal slash");
         assertEquals("nested", resolve("#legacy-slash?k/z"), "New format / is nested traversal");
     }
 
-    /** In a legacy key an unencoded {@code +} is a space, and {@code %2B} is a plus. */
+    /** Legacy keys retain plus signs and percent escapes verbatim. */
     @Test
-    public void testLegacyKeyPlusIsSpace() throws Exception {
+    public void testLegacyKeyPlusAndEscapesAreLiteral() throws Exception {
         seedSecret("legacy-plus", """
-                { "a b": "space", "a+b": "plus" }
+                { "a b": "space", "a+b": "plus", "a%20b": "percent-space", "a%2Bb": "percent-plus" }
                 """);
 
-        assertEquals("space", resolve("legacy-plus.a+b"));
-        assertEquals("space", resolve("legacy-plus.a%20b"));
-        assertEquals("plus", resolve("legacy-plus.a%2Bb"));
+        assertEquals("space", resolve("legacy-plus.a b"));
+        assertEquals("plus", resolve("legacy-plus.a+b"));
+        assertEquals("percent-space", resolve("legacy-plus.a%20b"));
+        assertEquals("percent-plus", resolve("legacy-plus.a%2Bb"));
+    }
+
+    /** Markers inside a legacy key do not select modern parsing or URL decoding. */
+    @Test
+    public void testLegacyKeyMarkersAndMalformedEscapesAreLiteral() throws Exception {
+        seedSecret("legacy-markers", """
+                { "a?b": "question", "a#b": "hash", "a@b": "at", "a%zz": "percent" }
+                """);
+
+        assertEquals("question", resolve("legacy-markers.a?b"));
+        assertEquals("hash", resolve("legacy-markers.a#b"));
+        assertEquals("at", resolve("legacy-markers.a@b"));
+        assertEquals("percent", resolve("legacy-markers.a%zz"));
+        assertEquals("question", resolve("#legacy-markers?a%3Fb"));
+    }
+
+    /** Trailing dots are discarded before the last separating dot is selected. */
+    @Test
+    public void testLegacyAliasDiscardsTrailingDots() throws Exception {
+        seedSecret("legacy-trailing", """
+                { "key": "trailing-dots" }
+                """);
+
+        assertEquals("trailing-dots", resolve("legacy-trailing.key."));
+        assertEquals("trailing-dots", resolve("legacy-trailing.key..."));
     }
 
     // =====================================================================
@@ -280,20 +308,34 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
         assertThrowsOnResolve("legacy-write.key");
     }
 
-    /** A legacy key containing an encoded slash is written as a nested value, as in 1.1.0.CR3. */
+    /** A legacy key containing an encoded slash is written and removed as a literal key, preserving siblings. */
     @Test
-    public void testAddLegacyAliasWithEncodedSlashWritesNestedValue() throws Exception {
-        addAliasSuccess("legacy-nested-write.a%2Fb", "nested-written");
+    public void testAddAndRemoveLegacyAliasWithEncodedSlashUseLiteralKey() throws Exception {
+        seedSecret("legacy-nested-write", """
+                { "a": { "b": "nested" }, "a/b": "literal-slash" }
+                """);
+        addAliasSuccess("legacy-nested-write.a%2Fb", "percent-written");
 
         ModelNode data = readSecret("legacy-nested-write");
-        assertFalse(data.has("a/b"), "Legacy %2F must not be stored as a literal slash key: " + data);
-        assertEquals("nested-written", data.get("a").get("b").asString());
+        assertEquals("percent-written", data.get("a%2Fb").asString());
+        assertEquals("literal-slash", data.get("a/b").asString());
+        assertEquals("nested", data.get("a").get("b").asString());
+        assertEquals("percent-written", resolve("#legacy-nested-write?a%252Fb"));
+
+        removeAliasSuccess("legacy-nested-write.a%2Fb");
+        data = readSecret("legacy-nested-write");
+        assertFalse(data.has("a%2Fb"), "Only the literal percent key should be removed: " + data);
+        assertEquals("literal-slash", data.get("a/b").asString());
+        assertEquals("nested", data.get("a").get("b").asString());
+        assertThrowsOnResolve("legacy-nested-write.a%2Fb");
     }
 
     /** A legacy alias written with {@code add-alias} is listed by {@code read-aliases} in the new format. */
     @Test
     public void testReadAliasesListsLegacyAliasInNewFormat() throws Exception {
         addAliasSuccess("legacy-listed.key", "listed");
+        addAliasSuccess("legacy-listed.a/b", "slash");
+        addAliasSuccess("legacy-listed.a%2Fb", "percent");
 
         ModelNode op = Util.createOperation("read-aliases", CREDENTIAL_STORE_ADDRESS);
         op.get("path").set("#legacy-listed");
@@ -301,7 +343,10 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
         ModelNode result = kernelServices.executeOperation(op);
         assertEquals(SUCCESS, result.get(OUTCOME).asString(), "read-aliases should succeed: " + result);
         Set<String> aliases = result.get(RESULT).asList().stream().map(ModelNode::asString).collect(Collectors.toSet());
-        assertEquals(Set.of("#legacy-listed?key"), aliases);
+        assertEquals(Set.of("#legacy-listed?key", "#legacy-listed?a%2Fb", "#legacy-listed?a%252Fb"), aliases);
+        assertEquals("listed", resolve("#legacy-listed?key"));
+        assertEquals("slash", resolve("#legacy-listed?a%2Fb"));
+        assertEquals("percent", resolve("#legacy-listed?a%252Fb"));
     }
 
     // =====================================================================
@@ -315,7 +360,7 @@ public class LegacyAliasFormatIntegrationTestCase extends SubsystemJUnit5TestCas
         assertEquals("failed", result.get(OUTCOME).asString(), "Alias without a dot should be rejected: " + result);
     }
 
-    /** A legacy alias must have both a secret path and a key. */
+    /** A legacy alias must have both a secret path and a key after trailing dots are discarded. */
     @Test
     public void testLegacyAliasWithEmptySecretOrKeyIsRejected() throws Exception {
         for (String alias : new String[] { "trailing-dot.", ".leading-dot" }) {

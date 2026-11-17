@@ -55,7 +55,7 @@
         <version.org.wildfly.plugins.wildfly-maven-plugin>6.1.0.Final</version.org.wildfly.plugins.wildfly-maven-plugin>
 
         <version.vault.java.driver>6.2.3</version.vault.java.driver>
-        <version.wildfly.elytron.hashicorp.vault>1.1.0.CR3</version.wildfly.elytron.hashicorp.vault>
+        <version.wildfly.elytron.hashicorp.vault>1.1.0.Final</version.wildfly.elytron.hashicorp.vault>
         <version.org.wildfly>42.0.0.Final</version.org.wildfly>
         <version.org.wildfly.common>1.6.0.Final</version.org.wildfly.common>
         <version.org.wildfly.core>34.0.1.Final</version.org.wildfly.core>

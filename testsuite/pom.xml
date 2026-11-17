@@ -33,7 +33,8 @@
         <as.debug.port>8787</as.debug.port>
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
-        <server.jboss.args>--stability=default</server.jboss.args>
+        <!-- Exercise legacy alias compatibility as well as qualified modern aliases. -->
+        <server.jboss.args>--stability=community</server.jboss.args>
         <!-- Feature-pack to use to provision vault -->
         <vault.feature.pack.groupId>${project.groupId}</vault.feature.pack.groupId>
         <vault.feature.pack.artifactId>wildfly-vault-feature-pack</vault.feature.pack.artifactId>

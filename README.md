@@ -103,6 +103,10 @@ compiled classes, packaged artifacts and provisioned servers. Check the Failsafe
 successful Surefire run alone does not establish Vault compatibility. Vault image
 selection is defined by the test fixtures.
 
+Normal Maven builds start the managed server at Community stability so the server
+integration tests exercise legacy alias compatibility alongside qualified modern aliases.
+To verify Default stability instead, use `-Dserver.jboss.args=--stability=default`.
+
 ### Testing with IPv4 and IPv6
 
 The managed integration tests use `node0` for the management connection (default
@@ -112,9 +116,9 @@ public and management bindings:
 
 ```bash
 mvn -pl subsystem,testsuite verify -Dnode0=127.0.0.1 \
-  '-Dserver.jboss.args=--stability=default -b=127.0.0.1 -bmanagement=127.0.0.1'
+  '-Dserver.jboss.args=--stability=community -b=127.0.0.1 -bmanagement=127.0.0.1'
 mvn -pl subsystem,testsuite verify -Dnode0=::1 \
-  '-Dserver.jboss.args=--stability=default -b=::1 -bmanagement=::1'
+  '-Dserver.jboss.args=--stability=community -b=::1 -bmanagement=::1'
 ```
 
 The IPv6 run requires IPv6 loopback support on the test host. Save each run's
@@ -123,7 +127,7 @@ Failsafe reports before starting the next run so both results are retained.
 The recursive alias-listing tests read the running server's stability. They exercise
 qualified modern aliases at every stability, plus legacy aliases when Community
 features are enabled or unqualified modern aliases at Default. Repeat the commands
-with `--stability=community` to cover legacy compatibility; modern aliases need
+with `--stability=default` to cover the Default branches; modern aliases need
 qualification (for example, `#myapp/database?password`) to avoid legacy path
 interpretation at Community.
 

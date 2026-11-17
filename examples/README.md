@@ -130,3 +130,41 @@ The credential store uses the format `[engine=TYPE][@mount-path][#]secret-path?k
 - `engine=KVv1@secret#myapp?password` explicitly specifies KVv1 engine
 
 The same alias format is used inside **`${HC_VAULT::store:alias}`** expressions.
+
+### Key paths: nested values and special characters
+
+The part after `?` is the key path. An unencoded `/` in it is nested JSON traversal. To refer to a key whose name contains a slash, write the slash as `%2F` (`%2f` is equivalent). The key path is split on `/` first, and each segment is then URL-decoded exactly once:
+
+| Alias key path | Meaning | Looks up |
+|----------------|---------|----------|
+| `?database/host` | Nested traversal | `data["database"]["host"]` |
+| `?database%2Fhost` | Literal key named `database/host` | `data["database/host"]` |
+| `?database%252Fhost` | Literal key named `database%2Fhost` | `data["database%2Fhost"]` |
+
+All three can exist in the same secret. `read-aliases` returns aliases in this same encoded form, so every alias it lists can be used again as-is. It lists values inside nested objects by their full key path, but not the objects themselves.
+
+Encode these characters when they are part of a key name or a secret path:
+
+| Character | Write as | Why |
+|-----------|----------|-----|
+| `%` | `%25` | `%` followed by two hex digits is read as an escape sequence |
+| `+` | `%2B` | an unencoded `+` is read as a space |
+| space | `%20` | |
+| `?` | `%3F` | `?` separates the secret path from the key path |
+| `#` | `%23` | |
+| `/` | `%2F` | key names only; in a secret path `/` is always a separator |
+
+A key path that ends at a JSON object is not a credential value and does not resolve; use a key path that ends at a value. `add-alias` changes only the value at the key path and leaves sibling keys and their JSON types unchanged, and `remove-alias` removes only that value.
+
+These rules are supported by `wildfly-elytron-hashicorp-vault` version `1.1.0.Final`. See the library's `docs/alias-format.md` for the complete alias specification.
+
+### Legacy alias format
+
+The older `secret-path.key` format is accepted only when Community stability is enabled (`--stability=community`) and is rejected at the default stability. It is kept for compatibility; prefer the format above.
+
+- Trailing dots are discarded, then the alias is split on its **last** dot. `my.app/config` is secret `my` with the literal key `app/config`.
+- The first path segment selects the mount: `secret/app.key` addresses secret `app` on mount `secret`. Paths without a slash use the default mount. Use `#path?key` or `@mount#path?key` for an explicit modern alias during migration.
+- Legacy keys stay literal: `/`, `%2F`, and `+` are part of the key name. For example, `secret/app.a/b` maps to modern alias `@secret#app?a%2Fb`, while `secret/app.a%2Fb` maps to `@secret#app?a%252Fb`.
+- Percent escapes in the secret path follow HTTP path semantics, so `%20` denotes a space and `+` remains a plus. Unescaped `?` and `#` in the path begin a query or fragment; version-selecting queries require legacy support.
+
+These legacy semantics preserve `1.0.1.Final` compatibility. The `1.1.0.CR1` through `CR3` releases decoded legacy keys and treated slashes in them as traversal; check the intended destination when migrating configurations from those releases.

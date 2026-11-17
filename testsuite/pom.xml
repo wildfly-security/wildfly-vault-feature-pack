@@ -33,7 +33,8 @@
         <as.debug.port>8787</as.debug.port>
         <surefire.system.args>${surefire.memory.args}</surefire.system.args>
         <server.jvm.args>${surefire.memory.args}</server.jvm.args>
-        <server.jboss.args>--stability=default</server.jboss.args>
+        <!-- Additional server arguments; each integration-test execution selects its stability. -->
+        <server.jboss.args/>
         <!-- Feature-pack to use to provision vault -->
         <vault.feature.pack.groupId>${project.groupId}</vault.feature.pack.groupId>
         <vault.feature.pack.artifactId>wildfly-vault-feature-pack</vault.feature.pack.artifactId>
@@ -342,29 +343,48 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <failIfNoTests>true</failIfNoTests>
+                    <includes>
+                        <include>**/*IntegrationTestCase.java</include>
+                    </includes>
+                    <!-- Only use Jupiter; Vintage would re-discover inherited JUnit 4 @Test methods -->
+                    <excludeJUnit5Engines>
+                        <excludeJUnit5Engine>junit-vintage</excludeJUnit5Engine>
+                    </excludeJUnit5Engines>
+                    <systemPropertyVariables>
+                        <jboss.home>${project.build.directory}/wildfly-layers</jboss.home>
+                        <arquillian.launch>wildfly</arquillian.launch>
+                        <server.jvm.args>${server.jvm.args}</server.jvm.args>
+                        <vault.docker.image>${vault.docker.image}</vault.docker.image>
+                    </systemPropertyVariables>
+                    <argLine>${surefire.memory.args}</argLine>
                 </configuration>
                 <executions>
                     <execution>
+                        <id>stability-default</id>
                         <goals>
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
                         <configuration>
-                            <includes>
-                                <include>**/*IntegrationTestCase.java</include>
-                            </includes>
-                            <!-- Only use Jupiter; Vintage would re-discover inherited JUnit 4 @Test methods -->
-                            <excludeJUnit5Engines>
-                                <excludeJUnit5Engine>junit-vintage</excludeJUnit5Engine>
-                            </excludeJUnit5Engines>
+                            <reportNameSuffix>default</reportNameSuffix>
+                            <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-default.xml</summaryFile>
                             <systemPropertyVariables>
-                                <jboss.home>${project.build.directory}/wildfly-layers</jboss.home>
-                                <arquillian.launch>wildfly</arquillian.launch>
-                                <server.jvm.args>${server.jvm.args}</server.jvm.args>
-                                <server.jboss.args>${server.jboss.args}</server.jboss.args>
-                                <vault.docker.image>${vault.docker.image}</vault.docker.image>
+                                <server.jboss.args>${server.jboss.args} --stability=default</server.jboss.args>
                             </systemPropertyVariables>
-                            <argLine>${surefire.memory.args}</argLine>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stability-community</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <reportNameSuffix>community</reportNameSuffix>
+                            <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-community.xml</summaryFile>
+                            <systemPropertyVariables>
+                                <server.jboss.args>${server.jboss.args} --stability=community</server.jboss.args>
+                            </systemPropertyVariables>
                         </configuration>
                     </execution>
                 </executions>

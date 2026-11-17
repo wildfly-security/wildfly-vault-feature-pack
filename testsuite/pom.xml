@@ -13,7 +13,7 @@
         Maintain separation between the artifact id and the version to help prevent
         merge conflicts between commits changing the GA and those changing the V.
         -->
-        <version>1.1.1.Final</version>
+        <version>1.1.2.CR1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 

@@ -3,3 +3,4 @@ target/
 galleon-local/target/
 galleon-shared/target/
 .idea/
+.bob/ 

@@ -242,7 +242,7 @@
                     <overwrite-provisioned-server>${overwrite.provisioned.server}</overwrite-provisioned-server>
                     <galleon-options>
                         <!-- Match the Elytron subsystem API used for compilation. -->
-                        <jboss-overridden-artifacts>org.wildfly.core:wildfly-elytron-integration:${version.org.wildfly.core.elytron}::jar</jboss-overridden-artifacts>
+                        <jboss-overridden-artifacts>org.wildfly.core:wildfly-elytron-integration:${version.org.wildfly.core}::jar</jboss-overridden-artifacts>
                         <jboss-fork-embedded>${galleon.fork.embedded}</jboss-fork-embedded>
                         <optional-packages>passive+</optional-packages>
                         <config-stability-level>default</config-stability-level>

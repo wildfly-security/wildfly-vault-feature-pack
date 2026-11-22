@@ -64,6 +64,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.net.ssl.SSLContext;
 
@@ -304,17 +306,13 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             doohickey.resolveRuntime(context);
 
             final ServiceName serviceName = CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
-
-            CredentialStoreService service = new CredentialStoreService(doohickey);
-
-            ServiceBuilder<CredentialStore> serviceBuilder =
-                    context.getServiceTarget().addService(serviceName, service);
-
-            // Also register the service under the subsystem-private capability so that
-            // VaultExpressionResolver can resolve ${HC_VAULT::...} expressions without
-            // accidentally targeting a non-Vault credential store.
             ServiceName privateServiceName = HASHICORP_VAULT_CREDENTIAL_STORE_RUNTIME_CAPABILITY.getCapabilityServiceName(name);
-            serviceBuilder.addAliases(privateServiceName);
+
+            ServiceBuilder<?> serviceBuilder = context.getServiceTarget().addService(serviceName);
+            // Register under both the public credential-store capability and the subsystem-private
+            // capability so that VaultExpressionResolver resolves HashiCorp Vault expressions to the correct service.
+            Consumer<CredentialStore> storeConsumer = serviceBuilder.provides(serviceName, privateServiceName);
+            CredentialStoreService service = new CredentialStoreService(doohickey, storeConsumer);
 
             // Wire the real MSC service dependency for the credential-reference so that
             // service restart properly re-evaluates the credential source. Also capture the
@@ -329,12 +327,12 @@ public class CredentialStoreDefinition extends SimpleResourceDefinition {
             if (CLIENT_SSL_CONTEXT_DEF.resolveModelAttribute(context, model).isDefined()) {
                 String clientSslContextName = CLIENT_SSL_CONTEXT_DEF.resolveModelAttribute(context, model).asString();
                 String sslCapability = RuntimeCapability.buildDynamicCapabilityName(CLIENT_SSL_CONTEXT_CAPABILITY, clientSslContextName);
-                serviceBuilder.addDependency(
-                        context.getCapabilityServiceName(sslCapability, SSLContext.class),
-                        SSLContext.class,
-                        service.getClientSslContextInjector());
+                Supplier<SSLContext> sslContextSupplier = serviceBuilder.requires(
+                        context.getCapabilityServiceName(sslCapability, SSLContext.class));
+                service.setClientSslContextSupplier(sslContextSupplier);
             }
 
+            serviceBuilder.setInstance(service);
             serviceBuilder.install();
         }
     };

@@ -13,7 +13,7 @@ import org.jboss.as.controller.Extension;
 import org.jboss.as.controller.ExtensionContext;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.PersistentResourceXMLDescriptionWriter;
+import org.jboss.as.controller.persistence.xml.SubsystemResourceXMLElementWriter;
 import org.jboss.as.controller.SubsystemModel;
 import org.jboss.as.controller.SubsystemRegistration;
 import org.jboss.as.version.Stability;
@@ -72,7 +72,7 @@ public final class VaultExtension implements Extension {
     public void initialize(ExtensionContext context) {
         final SubsystemRegistration subsystem = context.registerSubsystem(SUBSYSTEM_NAME, VaultSubsystemModel.CURRENT.getVersion());
         subsystem.registerSubsystemModel(new VaultSubsystemDefinition());
-        subsystem.registerXMLElementWriter(new PersistentResourceXMLDescriptionWriter(VaultSubsystemSchema.CURRENT.get(context.getStability())));
+        subsystem.registerXMLElementWriter(new SubsystemResourceXMLElementWriter(VaultSubsystemSchema.CURRENT.get(context.getStability()).getSubsystemXMLElement()));
 
         VaultExpressionResolver vaultResolver = new VaultExpressionResolver();
         context.registerExpressionResolverExtension(() -> vaultResolver, VAULT_EXPRESSION_PATTERN, false);

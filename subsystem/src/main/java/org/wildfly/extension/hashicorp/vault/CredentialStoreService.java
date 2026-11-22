@@ -7,16 +7,18 @@ package org.wildfly.extension.hashicorp.vault;
 import org.wildfly.extension.hashicorp.vault._private.HashiCorpVaultLogger;
 import org.wildfly.extension.hashicorp.vault.CredentialStoreDefinition.VaultCredentialStoreDoohickey;
 
-import org.jboss.msc.service.Service;
+import org.jboss.msc.Service;
 import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
-import org.jboss.msc.value.InjectedValue;
 import org.wildfly.common.function.ExceptionSupplier;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.credential.source.CredentialSource;
 import org.wildfly.security.credential.store.CredentialStore;
 import org.wildfly.security.password.interfaces.ClearPassword;
+
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.net.ssl.SSLContext;
 
@@ -29,15 +31,16 @@ import javax.net.ssl.SSLContext;
  * through the doohickey so both access paths see the same object. On stop the doohickey is reset
  * so the next service start rebuilds a fresh instance.</p>
  */
-public class CredentialStoreService implements Service<CredentialStore> {
+public class CredentialStoreService implements Service, Supplier<CredentialStore> {
 
     private final VaultCredentialStoreDoohickey doohickey;
+    private final Consumer<CredentialStore> storeConsumer;
 
     /**
-     * Optional injected SSLContext for HTTPS connections to Vault.
+     * Optional injected SSLContext supplier for HTTPS connections to Vault.
      * Populated by MSC when a {@code client-ssl-context} attribute is configured.
      */
-    private final InjectedValue<SSLContext> clientSslContextInjector = new InjectedValue<>();
+    private volatile Supplier<SSLContext> clientSslContextSupplier;
 
     /**
      * Optional injected credential-source supplier for the Vault token.
@@ -49,20 +52,21 @@ public class CredentialStoreService implements Service<CredentialStore> {
     private volatile CredentialStore credentialStore;
 
     /**
-     * Creates a new service backed by the given doohickey.
+     * Creates a new service backed by the given doohickey and value consumer.
      *
      * @param doohickey the doohickey that coordinates early-access and service-path initialization
+     * @param storeConsumer consumer to receive the initialized credential store
      */
-    public CredentialStoreService(VaultCredentialStoreDoohickey doohickey) {
+    CredentialStoreService(VaultCredentialStoreDoohickey doohickey, Consumer<CredentialStore> storeConsumer) {
         this.doohickey = doohickey;
+        this.storeConsumer = storeConsumer;
     }
 
     /**
-     * Returns the injected value holder for the MSC {@code client-ssl-context} dependency.
-     * The add handler wires this when a {@code client-ssl-context} attribute is configured.
+     * Sets the SSLContext supplier wired by the add handler when a {@code client-ssl-context} attribute is configured.
      */
-    InjectedValue<SSLContext> getClientSslContextInjector() {
-        return clientSslContextInjector;
+    void setClientSslContextSupplier(Supplier<SSLContext> supplier) {
+        this.clientSslContextSupplier = supplier;
     }
 
     /**
@@ -77,7 +81,7 @@ public class CredentialStoreService implements Service<CredentialStore> {
     public void start(StartContext context) throws StartException {
         credentialStore = doohickey.getForService(() -> {
             // Service-path builder: called only when the early-access path has not already run.
-            SSLContext sslContext = clientSslContextInjector.getOptionalValue();
+            SSLContext sslContext = clientSslContextSupplier != null ? clientSslContextSupplier.get() : null;
 
             String token = null;
             if (credentialSourceSupplier != null) {
@@ -105,10 +109,16 @@ public class CredentialStoreService implements Service<CredentialStore> {
                 throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreStartFailed(e);
             }
         });
+        if (storeConsumer != null) {
+            storeConsumer.accept(credentialStore);
+        }
     }
 
     @Override
     public void stop(StopContext context) {
+        if (storeConsumer != null) {
+            storeConsumer.accept(null);
+        }
         if (credentialStore != null) {
             try {
                 credentialStore.flush();
@@ -121,6 +131,10 @@ public class CredentialStoreService implements Service<CredentialStore> {
     }
 
     @Override
+    public CredentialStore get() {
+        return getValue();
+    }
+
     public CredentialStore getValue() throws IllegalStateException {
         if (credentialStore == null) {
             throw HashiCorpVaultLogger.ROOT_LOGGER.credentialStoreServiceNotStarted();
